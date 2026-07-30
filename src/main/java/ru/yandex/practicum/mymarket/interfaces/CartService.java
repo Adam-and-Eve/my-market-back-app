@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
+import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
 
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,16 @@ import java.util.Map;
 public interface CartService {
 
     // region Methods
+
+    /**
+     * <summary>
+     * Сборка и расчет агрегированных данных корзины для формирования полноценной страницы в UI.
+     * </summary>
+     * <return>
+     * @return Модель представления страницы корзины CartPageViewModel с подсчитанной итоговой стоимостью.
+     * </return>
+     **/
+    public CartPageViewModel findCart();
 
     /**
      * <summary>

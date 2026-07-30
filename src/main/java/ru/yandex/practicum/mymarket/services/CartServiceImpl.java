@@ -6,11 +6,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
+import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
+import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
 
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,7 @@ public class CartServiceImpl implements CartService {
      * Репозиторий для проверки существования и получения данных товаров из каталога.
      **/
     private final ItemRepository itemRepository;
+    private final ItemMapper itemMapper;
 
     // endregion
 
@@ -42,14 +45,40 @@ public class CartServiceImpl implements CartService {
 
     public CartServiceImpl(
             final CartItemRepository cartItemRepository,
-            final ItemRepository itemRepository) {
+            final ItemRepository itemRepository, ItemMapper itemMapper) {
         this.cartItemRepository = cartItemRepository;
         this.itemRepository = itemRepository;
+        this.itemMapper = itemMapper;
     }
 
     // endregion
 
     // region Methods
+
+    /**
+     * <summary>
+     * Сборка и расчет агрегированных данных корзины для формирования полноценной страницы в UI.
+     * </summary>
+     * <return>
+     * @return Модель представления страницы корзины CartPageViewModel с подсчитанной итоговой стоимостью.
+     * </return>
+     **/
+    @Transactional(readOnly = true)
+    @Override
+    public CartPageViewModel findCart() {
+        var items = cartItemRepository
+                .findAllByOrderByItemIdAsc()
+                .stream()
+                .map(itemMapper::toViewModel)
+                .toList();
+
+        var total = items
+                .stream()
+                .mapToLong(item -> item.price() * item.count())
+                .sum();
+
+        return new CartPageViewModel(items, total);
+    }
 
     /**
      * <summary>

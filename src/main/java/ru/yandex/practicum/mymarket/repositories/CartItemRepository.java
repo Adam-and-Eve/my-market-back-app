@@ -39,5 +39,16 @@ public interface CartItemRepository extends JpaRepository<CartItemModel, Long> {
      **/
     List<CartItemModel> findAllByItemIdIn(List<Long> itemIds);
 
+    /**
+     * <summary>
+     * Выполняет выборку всех элементов корзины с сортировкой по возрастанию идентификатора товара.
+     * Используется для обеспечения стабильного порядка отображения позиций в UI при изменении их количества.
+     * </summary>
+     * <return>
+     * @return Список доменных моделей всех элементов корзины, упорядоченных по ID товара.
+     * </return>
+     **/
+    List<CartItemModel> findAllByOrderByItemIdAsc();
+
     // endregion
 }
