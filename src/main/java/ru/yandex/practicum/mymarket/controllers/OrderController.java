@@ -38,6 +38,24 @@ public class OrderController {
 
     /**
      * <summary>
+     * Обрабатывает GET-запрос на получение и отображение страницы со списком всех оформленных заказов.
+     * </summary>
+     * @param model Контейнер Spring MVC для передачи коллекции заказов в шаблон отображения.
+     * <return>
+     * @return Имя HTML-шаблона "orders" для рендеринга страницы журнала заказов.
+     * </return>
+     **/
+    @GetMapping("/orders")
+    public String getOrders(Model model) {
+        var orders = orderService.findAll();
+
+        model.addAttribute("orders", orders);
+
+        return "orders";
+    }
+
+    /**
+     * <summary>
      * Обрабатывает GET-запрос на получение и отображение страницы конкретного заказа по его идентификатору.
      * </summary>
      * @param id Уникальный идентификатор запрашиваемого заказа.

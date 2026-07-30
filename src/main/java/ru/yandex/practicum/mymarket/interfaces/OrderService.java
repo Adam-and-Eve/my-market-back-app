@@ -2,6 +2,8 @@ package ru.yandex.practicum.mymarket.interfaces;
 
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
+import java.util.List;
+
 /**
  * <summary>
  * Контракт сервиса для управления бизнес-логикой создания, обработки и получения заказов пользователей.
@@ -10,6 +12,16 @@ import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 public interface OrderService {
 
     // region Methods
+
+    /**
+     * <summary>
+     * Возвращает полную коллекцию оформленных заказов, отсортированных по возрастанию их идентификатора.
+     * </summary>
+     * <return>
+     * @return Список моделей представления всех существующих заказов.
+     * </return>
+     **/
+    public List<OrderViewModel> findAll();
 
     /**
      * <summary>

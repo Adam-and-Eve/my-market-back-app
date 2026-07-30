@@ -11,6 +11,8 @@ import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
+import java.util.List;
+
 /**
  * <summary>
  * Сервис управления заказами пользователей
@@ -52,6 +54,23 @@ public class OrderServiceImpl implements OrderService {
     // endregion
 
     // region Methods
+
+    /**
+     * <summary>
+     * Возвращает список всех оформленных заказов, отсортированных по возрастанию идентификатора, с маппингом во View Model.
+     * Работает в режиме оптимизации транзакции "только для чтения".
+     * </summary>
+     * <return>
+     * @return Список моделей представления заказов List.
+     * </return>
+     **/
+    @Transactional(readOnly = true)
+    public List<OrderViewModel> findAll() {
+        return orderRepository.findAllByOrderByIdAsc()
+                .stream()
+                .map(orderMapper::toViewModel)
+                .toList();
+    }
 
     /**
      * <summary>
