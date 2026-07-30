@@ -9,9 +9,9 @@
 		<relativePath/>
 	</parent>
 	<groupId>ru.yandex.practicum</groupId>
-	<artifactId>my-market-app</artifactId>
+	<artifactId>my-market-back-app</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>my-market-app</name>
+	<name>my-market-back-app</name>
 	<description>My Market Application</description>
 	<url/>
 	<licenses>
