@@ -3,6 +3,7 @@ package ru.yandex.practicum.mymarket.mappers;
 import org.springframework.stereotype.Component;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.ItemModel;
+import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.ArrayList;
@@ -107,6 +108,28 @@ public class ItemMapper {
                 item.getImgPath(),
                 item.getPrice(),
                 cartItem.getQuantity()
+        );
+    }
+
+    /**
+     * <summary>
+     * Преобразует одиночную модель товара в объект модели представления (View Model).
+     * </summary>
+     * @param orderItem Исходная модель данных товара.
+     * <return>
+     * @return Сконвертированная модель представления товара.
+     * </return>
+     **/
+    public ItemViewModel toViewModel(
+            final OrderItemModel orderItem) {
+
+        return new ItemViewModel(
+                -1L,
+                orderItem.getTitle(),
+                "",
+                "",
+                orderItem.getPrice(),
+                orderItem.getQuantity()
         );
     }
 
