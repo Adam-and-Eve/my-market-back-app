@@ -1,18 +1,26 @@
 package ru.yandex.practicum.mymarket.services;
 
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
+import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
+import ru.yandex.practicum.mymarket.models.CartItemModel;
+import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.models.ItemSortEnumModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PagingViewModel;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * <summary>
@@ -30,6 +38,11 @@ public class ItemServiceImpl implements ItemService {
     private final ItemRepository itemRepository;
 
     /**
+     * Сервис для работы с корзиной.
+     **/
+    private final CartService cartService;
+
+    /**
      * Компонент-маппер для трансформации доменных моделей товаров в структуры интерфейса.
      **/
     private final ItemMapper itemMapper;
@@ -45,10 +58,12 @@ public class ItemServiceImpl implements ItemService {
 
     public ItemServiceImpl(
             final ItemRepository itemRepository,
+            final CartService cartService,
             final ItemMapper itemMapper,
             final CatalogHelper catalogHelper) {
 
         this.itemRepository = itemRepository;
+        this.cartService = cartService;
         this.itemMapper = itemMapper;
         this.catalogHelper = catalogHelper;
     }
@@ -66,8 +81,47 @@ public class ItemServiceImpl implements ItemService {
      * </return>
      **/
     @Transactional(readOnly = true)
+    @Override
     public List<ItemModel> findAll() {
         return itemRepository.findAll();
+    }
+
+    /**
+     * <summary>
+     * Получает View-модель товара по его уникальному идентификатору с обогащением данными из корзины.
+     * </summary>
+     * @param id Уникальный идентификатор товара.
+     * <return>
+     * @return Модель представления товара с актуальным количеством в корзине текущего пользователя.
+     * </return>
+     * @throws ResponseStatusException Если товар с указанным идентификатором не найден (HTTP 404).
+     **/
+    @Transactional(readOnly = true)
+    @Override
+    public ItemViewModel findById(final long id) {
+        return itemRepository
+                .findById(id)
+                .map(item -> itemMapper.toViewModel(item, cartService.findCountForItem(item.getId())))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
+    }
+
+    /**
+     * <summary>
+     * Находит чистую доменную модель товара по его идентификатору.
+     * Используется для внутренних нужд других компонентов и междоменного взаимодействия.
+     * </summary>
+     * @param id Уникальный идентификатор товара.
+     * <return>
+     * @return Доменная модель товара ItemModel.
+     * </return>
+     * @throws ResponseStatusException Если товар с указанным идентификатором не найден (HTTP 404).
+     **/
+    @Transactional(readOnly = true)
+    @Override
+    public ItemModel findModelById(final long id) {
+        return itemRepository
+                .findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
     }
 
     /**
@@ -84,6 +138,7 @@ public class ItemServiceImpl implements ItemService {
      * </return>
      **/
     @Transactional(readOnly = true)
+    @Override
     public CatalogPageViewModel findCatalog(
             final String search,
             final String sort,
@@ -108,8 +163,14 @@ public class ItemServiceImpl implements ItemService {
           pageable
         );
 
+        var items = page.getContent();
+
+        var itemIds = items.stream().map(ItemModel::getId).toList();
+
+        var counts = cartService.findCountsForItems(itemIds);
+
         return new CatalogPageViewModel(
-                itemMapper.toRows(page.getContent()),
+                itemMapper.toRows(items, counts),
                 normalizedSearch,
                 itemSort.name(),
                 new PagingViewModel(normalizedPageSize, normalizedPageNumber, page.hasPrevious(), page.hasNext())

@@ -1,7 +1,9 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
+import org.springframework.web.server.ResponseStatusException;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.List;
 
@@ -23,6 +25,31 @@ public interface ItemService {
      * </return>
      **/
     public List<ItemModel> findAll();
+
+    /**
+     * <summary>
+     * Получает View-модель товара по его уникальному идентификатору с обогащением данными из корзины.
+     * </summary>
+     * @param id Уникальный идентификатор товара.
+     * <return>
+     * @return Модель представления товара с актуальным количеством в корзине текущего пользователя.
+     * </return>
+     * @throws ResponseStatusException Если товар с указанным идентификатором не найден (HTTP 404).
+     **/
+    public ItemViewModel findById(final long id);
+
+    /**
+     * <summary>
+     * Находит чистую доменную модель товара по его идентификатору.
+     * Используется для внутренних нужд других компонентов и междоменного взаимодействия.
+     * </summary>
+     * @param id Уникальный идентификатор товара.
+     * <return>
+     * @return Доменная модель товара ItemModel.
+     * </return>
+     * @throws ResponseStatusException Если товар с указанным идентификатором не найден (HTTP 404).
+     **/
+    public ItemModel findModelById(final long id);
 
     /**
      * <summary>

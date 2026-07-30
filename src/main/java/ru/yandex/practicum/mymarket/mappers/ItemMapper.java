@@ -6,6 +6,7 @@ import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * <summary>
@@ -37,7 +38,10 @@ public class ItemMapper {
      * @return Двумерный список моделей представления, распределенных по строкам для отображения в сетке.
      * </return>
      **/
-    public List<List<ItemViewModel>> toRows(final List<ItemModel> items) {
+    public List<List<ItemViewModel>> toRows(
+            final List<ItemModel> items,
+            final Map<Long, Integer> counts) {
+
         var rows = new ArrayList<List<ItemViewModel>>();
 
         for (var i = 0; i < items.size(); i += ITEMS_PER_ROW) {
@@ -45,7 +49,7 @@ public class ItemMapper {
 
             items.subList(i, Math.min(i + ITEMS_PER_ROW, items.size()))
                     .stream()
-                    .map(this::toViewModel)
+                    .map(item -> toViewModel(item, counts.getOrDefault(item.getId(), 0)))
                     .forEach(row::add);
 
             while (row.size() < ITEMS_PER_ROW) {
@@ -67,14 +71,17 @@ public class ItemMapper {
      * @return Сконвертированная модель представления товара с обнуленным счетчиком количества.
      * </return>
      **/
-    public ItemViewModel toViewModel(final ItemModel item) {
+    public ItemViewModel toViewModel(
+            final ItemModel item,
+            final int count) {
+
         return new ItemViewModel(
                 item.getId(),
                 item.getTitle(),
                 item.getDescription(),
                 item.getImgPath(),
                 item.getPrice(),
-                0
+                count
         );
     }
 

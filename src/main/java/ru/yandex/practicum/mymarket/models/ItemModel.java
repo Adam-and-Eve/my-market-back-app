@@ -9,7 +9,7 @@ import jakarta.persistence.*;
  * </summary>
  **/
 @Entity
-@Table(name = "Items")
+@Table(name = "items")
 public class ItemModel {
 
     // region Fields
