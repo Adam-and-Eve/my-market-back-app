@@ -3,7 +3,10 @@ package ru.yandex.practicum.mymarket.controllers;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
+import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 
 /**
  * <summary>
@@ -52,6 +55,27 @@ public class CartController {
 
 
         return "cart";
+    }
+
+    /**
+     * <summary>
+     * Обрабатывает POST-запросы со страницы корзины для изменения количества выбранного товара.
+     * </summary>
+     * @param id Уникальный идентификатор изменяемого товара.
+     * @param action Тип действия над позицией (PLUS, MINUS, DELETE).
+     * <return>
+     * @return Строка перенаправления (redirect) на GET-метод отображения корзины.
+     * </return>
+     **/
+    @PostMapping("/cart/items")
+    public String updateCartItem(
+            @RequestParam final long id,
+            @RequestParam final CartActionEnumModel action,
+            Model model){
+
+        cartService.updateItemCount(id, action);
+
+        return "redirect:/cart/items";
     }
 
     // endregion
