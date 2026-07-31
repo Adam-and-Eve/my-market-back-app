@@ -1,6 +1,8 @@
 package ru.yandex.practicum.mymarket.models;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 /**
  * <summary>
@@ -8,7 +10,6 @@ import jakarta.persistence.*;
  * Представляет позицию в каталоге интернет-магазина с описанием, ценой и метаданными.
  * </summary>
  **/
-@Entity
 @Table(name = "items")
 public class ItemModel {
 
@@ -18,31 +19,31 @@ public class ItemModel {
      * Уникальный идентификатор товара в системе.
      **/
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column("id")
     private Long id;
 
     /**
      * Наименование (заголовок) товара.
      **/
-    @Column(nullable = false)
+    @Column("title")
     private String title;
 
     /**
      * Подробное текстовое описание характеристик и свойств товара.
      **/
-    @Column(nullable = false, length = 1024)
+    @Column("description")
     private String description;
 
     /**
      * Относительный или абсолютный путь к файлу изображения товара.
      **/
-    @Column(nullable = false)
+    @Column("img_path")
     private String imgPath;
 
     /**
      * Стоимость товара.
      **/
-    @Column(nullable = false)
+    @Column("price")
     private long price;
 
     // endregion

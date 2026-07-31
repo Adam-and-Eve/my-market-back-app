@@ -1,6 +1,9 @@
 package ru.yandex.practicum.mymarket.models;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 /**
  * <summary>
@@ -8,11 +11,8 @@ import jakarta.persistence.*;
  * Связывает конкретный товар из каталога с количеством единиц, добавленных пользователем в корзину.
  * </summary>
  **/
-@Entity
-@Table(
-        name = "cart_items",
-        uniqueConstraints = @UniqueConstraint(name = "uk_cartitems_item_id", columnNames = "item_id")
-)
+
+@Table("cart_items")
 public class CartItemModel {
 
     // region Fields
@@ -21,20 +21,25 @@ public class CartItemModel {
      * Уникальный идентификатор записи элемента корзины в базе данных.
      **/
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column("id")
     private Long id;
+
+    /**
+     * Уникальный идентификатор записи связанного элемента товара в базе данных.
+     **/
+    @Column("item_id")
+    private Long itemId;
 
     /**
      * Ссылка на связанную доменную модель товара из каталога.
      **/
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "item_id", nullable = false)
+    @Transient
     private ItemModel item;
 
     /**
      * Количество единиц данного товара в корзине.
      **/
-    @Column(nullable = false)
+    @Column("quantity")
     private int quantity;
 
     // endregion
@@ -47,12 +52,37 @@ public class CartItemModel {
 
     public CartItemModel(final ItemModel item, final int quantity) {
         this.item = item;
+        this.itemId = item.getId();
         this.quantity = quantity;
     }
 
     // endregion
 
     // region Properties
+
+    /**
+     * <summary>
+     * Возвращает уникальный идентификатор записи элемента корзины в базе данных.
+     * </summary>
+     * <return>
+     * @return Уникальный идентификатор записи элемента корзины в базе данных.
+     * </return>
+     **/
+    public Long getId() {
+        return id;
+    }
+
+    /**
+     * <summary>
+     * Возвращает уникальный идентификатор записи связанного элемента товара в базе данных.
+     * </summary>
+     * <return>
+     * @return Уникальный идентификатор записи связанного элемента товара в базе данных.
+     * </return>
+     **/
+    public Long getItemId() {
+        return itemId;
+    }
 
     /**
      * <summary>

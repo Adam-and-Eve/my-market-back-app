@@ -1,6 +1,9 @@
 package ru.yandex.practicum.mymarket.models;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,7 +13,6 @@ import java.util.List;
  * Доменная модель, представляющая оформленный заказ покупателя.
  * </summary>
  **/
-@Entity
 @Table(name = "orders")
 public class OrderModel {
 
@@ -20,13 +22,13 @@ public class OrderModel {
      * Уникальный идентификатор заказа в базе данных.
      **/
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column("id")
     private Long id;
 
     /**
      * Коллекция связанных исторических товарных позиций, входящих в данный заказ.
      **/
-    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Transient
     private List<OrderItemModel> items = new ArrayList<>();
 
     // endregion
@@ -77,7 +79,7 @@ public class OrderModel {
      * @param quantity Количество приобретаемых единиц товара.
      **/
     public void addItem(final ItemModel item, final int quantity) {
-        items.add(new OrderItemModel(this, item.getTitle(), item.getPrice(), quantity));
+        items.add(new OrderItemModel(id, item.getTitle(), item.getPrice(), quantity));
     }
 
     /**
