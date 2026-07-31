@@ -5,6 +5,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 
@@ -46,15 +47,11 @@ public class CartController {
      * </return>
      **/
     @GetMapping("/cart/items")
-    public String getCart(final Model model) {
-
-        var cartPage = cartService.findCart();
-
-        model.addAttribute("items", cartPage.items());
-        model.addAttribute("total", cartPage.total());
-
-
-        return "cart";
+    public Mono<String> getCart(final Model model) {
+        return cartService.findCart().doOnNext(cartPage -> {
+            model.addAttribute("items", cartPage.items());
+            model.addAttribute("total", cartPage.total());
+        }).thenReturn("cart");
     }
 
     /**
@@ -68,14 +65,13 @@ public class CartController {
      * </return>
      **/
     @PostMapping("/cart/items")
-    public String updateCartItem(
+    public Mono<String> updateCartItem(
             @RequestParam final long id,
             @RequestParam final CartActionEnumModel action,
             Model model){
 
-        cartService.updateItemCount(id, action);
-
-        return "redirect:/cart/items";
+        return cartService.updateItemCount(id, action)
+                .thenReturn("redirect:/cart/items");
     }
 
     // endregion

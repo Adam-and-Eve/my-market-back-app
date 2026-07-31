@@ -9,9 +9,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
+import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 
 /**
  * <summary>
@@ -59,21 +61,16 @@ public class CatalogController {
      * </return>
      **/
     @GetMapping({"/", "/items"})
-    public String getCatalog(
+    public Mono<String> getCatalog(
             @RequestParam(required = false) final String search,
             @RequestParam(required = false) final String sort,
             @RequestParam(required = false) final Integer pageNumber,
             @RequestParam(required = false) final Integer pageSize,
             final Model model
     ){
-        var catalogPage = itemService.findCatalog(search, sort, pageNumber, pageSize);
-
-        model.addAttribute("items", catalogPage.items());
-        model.addAttribute("search", catalogPage.search());
-        model.addAttribute("sort", catalogPage.sort());
-        model.addAttribute("paging", catalogPage.paging());
-
-        return "items";
+        return itemService.findCatalog(search, sort, pageNumber, pageSize)
+                        .doOnNext(catalogPage -> fillModel(model, catalogPage))
+                        .thenReturn("items");
     }
 
     /**
@@ -87,15 +84,13 @@ public class CatalogController {
      * </return>
      **/
     @GetMapping("/items/{id}")
-    public String getItem(
+    public Mono<String> getItem(
             @PathVariable final long id,
             final Model model) {
 
-        var item = itemService.findById(id);
-
-        model.addAttribute("item", item);
-
-        return "item";
+        return itemService.findById(id)
+                .doOnNext(item -> model.addAttribute("item", item))
+                .thenReturn("item");
     }
 
     /**
@@ -114,17 +109,16 @@ public class CatalogController {
      * </return>
      **/
     @PostMapping("/items")
-    public String updateCatalogItem(
-            @RequestParam(required = true) final long id,
+    public Mono<String> updateCatalogItem(
+            @RequestParam final long id,
             @RequestParam(required = false) final String search,
             @RequestParam(required = false) final String sort,
             @RequestParam(required = false) final Integer pageNumber,
             @RequestParam(required = false) final Integer pageSize,
             @RequestParam CartActionEnumModel action
     ){
-        cartService.updateItemCount(id, action);
-
-        return redirectToCatalog(search, sort, pageNumber, pageSize);
+        return cartService.updateItemCount(id, action)
+                .thenReturn(redirectToCatalog(search, sort, pageNumber, pageSize));
     }
 
     /**
@@ -138,14 +132,20 @@ public class CatalogController {
      * </return>
      **/
     @PostMapping("/items/{id}")
-    public String updateItem(
+    public Mono<String> updateItem(
             @PathVariable final long id,
             @RequestParam CartActionEnumModel action,
             Model model
     ){
-        cartService.updateItemCount(id, action);
+        return cartService.updateItemCount(id, action)
+                .then(getItem(id, model));
+    }
 
-        return "redirect:/items/" + id;
+    private void fillModel(final Model model, CatalogPageViewModel viewModel) {
+        model.addAttribute("items", viewModel.items());
+        model.addAttribute("search", viewModel.search());
+        model.addAttribute("sort", viewModel.sort());
+        model.addAttribute("paging", viewModel.paging());
     }
 
     /**

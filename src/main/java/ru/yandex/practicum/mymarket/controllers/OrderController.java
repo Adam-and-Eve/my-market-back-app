@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
 
 /**
@@ -46,12 +47,13 @@ public class OrderController {
      * </return>
      **/
     @GetMapping("/orders")
-    public String getOrders(Model model) {
-        var orders = orderService.findAll();
-
-        model.addAttribute("orders", orders);
-
-        return "orders";
+    public Mono<String> getOrders(Model model) {
+        return orderService.findAll()
+                .collectList()
+                .doOnNext(orders -> {
+                    model.addAttribute("orders", orders);
+                })
+                .thenReturn("orders");
     }
 
     /**
@@ -66,17 +68,17 @@ public class OrderController {
      * </return>
      **/
     @GetMapping("/orders/{id}")
-    public String getOrder(
+    public Mono<String> getOrder(
             @PathVariable final long id,
             @RequestParam(defaultValue = "false") final boolean newOrder,
             Model model
     ){
-        var order = orderService.findById(id);
-
-        model.addAttribute("order", order);
-        model.addAttribute("newOrder", newOrder);
-
-        return "order";
+        return orderService.findById(id)
+                .doOnNext(order -> {
+                    model.addAttribute("order", order);
+                    model.addAttribute("newOrder", newOrder);
+                })
+                .thenReturn("order");
     }
 
     /**
@@ -88,14 +90,15 @@ public class OrderController {
      * </return>
      **/
     @PostMapping("/buy")
-    public String buy() {
-        var orderId = orderService.buy();
+    public Mono<String> buy() {
+        return orderService.buy()
+                .map(orderId -> {
+                    if (orderId == -1) {
+                        return "redirect:/cart/items";
+                    }
 
-        if (orderId == -1) {
-            return "redirect:/cart/items";
-        }
-
-        return "redirect:/orders/" + orderId + "?newOrder=true";
+                    return "redirect:/orders/" + orderId + "?newOrder=true";
+                });
     }
 
     // endregion
