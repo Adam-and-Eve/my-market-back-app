@@ -1,17 +1,15 @@
 package ru.yandex.practicum.mymarket.repositories;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
 import ru.yandex.practicum.mymarket.models.OrderModel;
-import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
-
-import java.util.List;
 
 /**
  * <summary>
  * Интерфейс репозитория для выполнения операций CRUD и управления персистентным состоянием доменных моделей заказов OrderModel.
  * </summary>
  **/
-public interface OrderRepository extends JpaRepository<OrderModel, Long> {
+public interface OrderRepository extends ReactiveCrudRepository<OrderModel, Long> {
 
     // region Methods
 
@@ -23,7 +21,7 @@ public interface OrderRepository extends JpaRepository<OrderModel, Long> {
      * @return Список доменных сущностей заказов OrderModel.
      * </return>
      **/
-    public List<OrderModel> findAllByOrderByIdAsc();
+    public Flux<OrderModel> findAllByOrderByIdAsc();
 
     // endregion
 }
