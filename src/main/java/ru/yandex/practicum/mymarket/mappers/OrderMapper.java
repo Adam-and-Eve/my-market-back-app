@@ -1,8 +1,15 @@
 package ru.yandex.practicum.mymarket.mappers;
 
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.models.ItemModel;
+import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.models.OrderModel;
+import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
+import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
+
+import java.util.List;
 
 /**
  * <summary>
@@ -15,13 +22,18 @@ public class OrderMapper {
 
     // region Fields
 
+    private final OrderItemRepository orderItemRepository;
     private final ItemMapper itemMapper;
 
     // endregion
 
     // region Constructors
 
-    public OrderMapper(final ItemMapper itemMapper) {
+    public OrderMapper(
+            final OrderItemRepository orderItemRepository,
+            final ItemMapper itemMapper) {
+
+        this.orderItemRepository = orderItemRepository;
         this.itemMapper = itemMapper;
     }
 
@@ -31,23 +43,32 @@ public class OrderMapper {
 
     /**
      * <summary>
-     * Преобразует одиночную модель заказа в объект модели представления (View Model).
+     * Асинхронно преобразует доменную модель заказа в объект модели представления (View Model).
+     * Извлекает из репозитория все позиции, привязанные к заказу, и калькулирует общую стоимость.
      * </summary>
-     * @param order Исходная модель данных заказа.
+     * @param order Исходная доменная модель данных заказа.
      * <return>
-     * @return Сконвертированная модель представления заказа.
+     * @return Реактивный контейнер Mono со сконвертированной моделью представления заказа.
      * </return>
      **/
-    public OrderViewModel toViewModel(
-            final OrderModel order) {
-
-        var items = order.getItems()
-                .stream()
+    public Mono<OrderViewModel> toViewModel(final OrderModel order)
+    {
+        return orderItemRepository.findAllByOrderIdOrderByIdAsc(order.getId())
                 .map(itemMapper::toViewModel)
-                .toList();
+                .collectList()
+                .map(items -> toOrderViewModel(order, items));
+    }
 
-        var totalSum = items.
-                stream()
+    /**
+     * <summary>
+     * Синхронно агрегирует модель заказа и готовый список позиций, вычисляя финальную сумму.
+     * </summary>
+     **/
+    private OrderViewModel toOrderViewModel(
+            final OrderModel order,
+            final List<ItemViewModel> items)
+    {
+        var totalSum = items.stream()
                 .mapToLong(item -> item.price() * item.count())
                 .sum();
 

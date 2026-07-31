@@ -4,10 +4,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
+import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.mappers.OrderMapper;
+import ru.yandex.practicum.mymarket.models.CartItemModel;
+import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.models.OrderModel;
 import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
+import ru.yandex.practicum.mymarket.repositories.ItemRepository;
+import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
@@ -22,6 +29,8 @@ public class OrderServiceImpl implements OrderService {
 
     // region Fields
 
+    private final ItemRepository itemRepository;
+
     /**
      * Репозиторий для управления персистентным состоянием элементов корзины покупателя.
      **/
@@ -33,6 +42,13 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
 
     /**
+     * <summary>
+     * Репозиторий для управления персистентным состоянием элементов корзины покупателя.
+     * </summary>
+     **/
+    private final OrderItemRepository orderItemRepository;
+
+    /**
      * Компонент-маппер для трансформации доменных моделей заказов в их UI-представления.
      **/
     private final OrderMapper orderMapper;
@@ -42,12 +58,16 @@ public class OrderServiceImpl implements OrderService {
     // region Constructors
 
     public OrderServiceImpl(
+            final ItemRepository itemRepository,
             final CartItemRepository cartItemRepository,
             final OrderRepository orderRepository,
+            final OrderItemRepository orderItemRepository,
             final OrderMapper orderMapper) {
 
+        this.itemRepository = itemRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
+        this.orderItemRepository = orderItemRepository;
         this.orderMapper = orderMapper;
     }
 
@@ -65,11 +85,9 @@ public class OrderServiceImpl implements OrderService {
      * </return>
      **/
     @Transactional(readOnly = true)
-    public List<OrderViewModel> findAll() {
+    public Flux<OrderViewModel> findAll() {
         return orderRepository.findAllByOrderByIdAsc()
-                .stream()
-                .map(orderMapper::toViewModel)
-                .toList();
+                .flatMap(orderMapper::toViewModel);
     }
 
     /**
@@ -84,11 +102,11 @@ public class OrderServiceImpl implements OrderService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public OrderViewModel findById(final long id) {
+    public Mono<OrderViewModel> findById(final long id) {
         return orderRepository
                 .findById(id)
-                .map(orderMapper::toViewModel)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found."));
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found.")))
+                .flatMap(orderMapper::toViewModel);
     }
 
 
@@ -103,22 +121,58 @@ public class OrderServiceImpl implements OrderService {
      **/
     @Transactional()
     @Override
-    public long buy() {
-        var cartItems = cartItemRepository.findAllByOrderByItemIdAsc();
+    public Mono<Long> buy() {
+        return cartItemRepository.findAllByOrderByItemIdAsc()
+                .collectList()
+                .flatMap(cartItems -> {
+                    if (cartItems.isEmpty()) {
+                        return Mono.just(-1L);
+                    }
 
-        if (cartItems.isEmpty()) {
-            return -1;
-        }
+                    return saveOrder(cartItems);
+                });
+    }
 
-        var order = OrderModel.create();
+    /**
+     * <summary>
+     * Преобразует плоский список элементов корзины в реактивный поток исторических позиций создаваемого заказа.
+     * </summary>
+     * @param orderId Уникальный идентификатор созданного родительского заказа.
+     * @param cartItems Список элементов корзины, подлежащих переносу в заказ.
+     * <return>
+     * @return Реактивный поток созданных исторических позиций заказа Flux.
+     * </return>
+     **/
+    private Flux<OrderItemModel> createOrderItems(
+            final long orderId,
+            final List<CartItemModel> cartItems) {
 
-        cartItems.forEach(cartItem -> order.addItem(cartItem.getItem(), cartItem.getQuantity()));
+        return Flux.fromIterable(cartItems)
+                .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
+                        .map(item -> new OrderItemModel(
+                                orderId,
+                                item.getTitle(),
+                                item.getPrice(),
+                                cartItem.getQuantity()
+                        )));
+    }
 
-        var savedOrder = orderRepository.save(order);
-
-        cartItemRepository.deleteAll(cartItems);
-
-        return savedOrder.getId();
+    /**
+     * <summary>
+     * Атомарно сохраняет шапку нового заказа, генерирует и записывает его позиции,
+     * после чего производит полную очистку текущей корзины покупателя.
+     * </summary>
+     * @param cartItems Список элементов корзины для сохранения в составе заказа.
+     * <return>
+     * @return Моно-контейнер с уникальным идентификатором успешно сохраненного заказа.
+     * </return>
+     **/
+    private Mono<Long> saveOrder(final List<CartItemModel> cartItems) {
+        return orderRepository.save(OrderModel.create())
+                .flatMap(savedOrder -> createOrderItems(savedOrder.getId(), cartItems)
+                        .as(orderItemRepository::saveAll)
+                        .then(cartItemRepository.deleteAll(cartItems))
+                        .thenReturn(savedOrder.getId()));
     }
 
     // endregion

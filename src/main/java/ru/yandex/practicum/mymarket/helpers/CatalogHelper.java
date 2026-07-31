@@ -2,7 +2,11 @@ package ru.yandex.practicum.mymarket.helpers;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
+import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.models.ItemSortEnumModel;
+
+import java.util.Comparator;
+import java.util.function.Predicate;
 
 /**
  * <summary>
@@ -94,6 +98,47 @@ public class CatalogHelper {
             case NO -> Sort.unsorted();
             case ALPHA -> Sort.by(Sort.Direction.ASC, "title");
             case PRICE -> Sort.by(Sort.Direction.ASC, "price");
+        };
+    }
+
+    /**
+     * <summary>
+     * Создает предикат проверки соответствия товара поисковой подстроке без учета регистра букв.
+     * </summary>
+     * @param search Нормализованная поисковая строка для фильтрации.
+     * <return>
+     * @return Предикат для фильтрации реактивного или стандартного стрима товаров.
+     * </return>
+     **/
+    public Predicate<ItemModel> matchesSearch(final String search)
+    {
+        if (search.isEmpty())
+        {
+            return item -> true;
+        }
+
+        var lowerCaseSearch = search.toLowerCase();
+
+        return item -> item.getTitle().toLowerCase().contains(lowerCaseSearch) ||
+                item.getDescription().toLowerCase().contains(lowerCaseSearch);
+    }
+
+    /**
+     * <summary>
+     * Разрешает нужный экземпляр компаратора для выполнения in-memory сортировки доменных моделей.
+     * </summary>
+     * @param sort Выбранный элемент перечисления стратегии сортировки элементов.
+     * <return>
+     * @return Компаратор для упорядочивания объектов ItemModel в реактивном потоке.
+     * </return>
+     **/
+    public Comparator<ItemModel> resolveComparator(final ItemSortEnumModel sort)
+    {
+        return switch (sort)
+        {
+            case NO -> Comparator.comparing(ItemModel::getId);
+            case ALPHA -> Comparator.comparing(ItemModel::getTitle, String.CASE_INSENSITIVE_ORDER);
+            case PRICE -> Comparator.comparing(ItemModel::getPrice);
         };
     }
 

@@ -56,6 +56,11 @@ public class CartItemModel {
         this.quantity = quantity;
     }
 
+    public CartItemModel(final Long itemId, final int quantity) {
+        this.itemId = itemId;
+        this.quantity = quantity;
+    }
+
     // endregion
 
     // region Properties

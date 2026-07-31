@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
@@ -18,8 +20,10 @@ import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PagingViewModel;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -82,7 +86,7 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public List<ItemModel> findAll() {
+    public Flux<ItemModel> findAll() {
         return itemRepository.findAll();
     }
 
@@ -98,11 +102,12 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public ItemViewModel findById(final long id) {
-        return itemRepository
-                .findById(id)
-                .map(item -> itemMapper.toViewModel(item, cartService.findCountForItem(item.getId())))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
+    public Mono<ItemViewModel> findById(final long id) {
+        return itemRepository.findById(id)
+                .flatMap(item -> cartService.findCountForItem(item.getId())
+                        .map(count -> itemMapper.toViewModel(item, count)))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
+
     }
 
     /**
@@ -118,10 +123,9 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public ItemModel findModelById(final long id) {
-        return itemRepository
-                .findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
+    public Mono<ItemModel> findModelById(final long id) {
+        return itemRepository.findById(id)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
     }
 
     /**
@@ -139,7 +143,7 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public CatalogPageViewModel findCatalog(
+    public Mono<CatalogPageViewModel> findCatalog(
             final String search,
             final String sort,
             final Integer pageNumber,
@@ -153,28 +157,64 @@ public class ItemServiceImpl implements ItemService {
 
         var normalizedPageSize = catalogHelper.normalizePageSize(pageSize);
 
-        var pageable = PageRequest.of(normalizedPageNumber - 1, normalizedPageSize, catalogHelper.resolveSort(itemSort));
+        return itemRepository.findAll()
+                .filter(catalogHelper.matchesSearch(normalizedSearch))
+                .sort(catalogHelper.resolveComparator(itemSort))
+                .collectList()
+                .flatMap(items -> buildCatalogPage(
+                   items,
+                   normalizedSearch,
+                   itemSort,
+                   normalizedPageNumber,
+                   normalizedPageSize
+                ));
+    }
 
-        var page = normalizedSearch.isBlank()
-                ? itemRepository.findAll(pageable)
-                : itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-          normalizedSearch,
-          normalizedSearch,
-          pageable
-        );
+    /**
+     * <summary>
+     * Выполняет постраничную нарезку отсортированного списка товаров, обогащает их данными о количестве
+     * в корзине текущего пользователя и собирает итоговую View-модель страницы каталога.
+     * </summary>
+     * @param allItems Полный предварительно отфильтрованный и отсортированный список моделей товаров.
+     * @param search Нормализованная поисковая строка, использованная при фильтрации.
+     * @param sort Примененная стратегия сортировки элементов каталога.
+     * @param pageNumber Номер текущей отображаемой страницы.
+     * @param pageSize Количество элементов, отображаемых на одной странице.
+     * <return>
+     * @return Реактивный контейнер Mono с заполненной моделью представления страницы каталога.
+     * </return>
+     **/
+    private Mono<CatalogPageViewModel> buildCatalogPage(
+            final List<ItemModel> allItems,
+            final String search,
+            final ItemSortEnumModel sort,
+            final int pageNumber,
+            final int pageSize
+    ){
+        var fromIndex = Math.min((pageNumber - 1) * pageSize, allItems.size());
 
-        var items = page.getContent();
+        var toIndex = Math.min((fromIndex + pageSize), allItems.size());
 
-        var itemIds = items.stream().map(ItemModel::getId).toList();
+        var pageItems = allItems.subList(fromIndex, toIndex);
 
-        var counts = cartService.findCountsForItems(itemIds);
+        var hasPrevious = pageNumber > 1;
 
-        return new CatalogPageViewModel(
-                itemMapper.toRows(items, counts),
-                normalizedSearch,
-                itemSort.name(),
-                new PagingViewModel(normalizedPageSize, normalizedPageNumber, page.hasPrevious(), page.hasNext())
-        );
+        var hasNext = toIndex < allItems.size();
+
+        var itemIds = pageItems.stream().map(ItemModel::getId).toList();
+
+        return cartService.findCountsForItems(itemIds)
+                .map(counts -> new CatalogPageViewModel(
+                        itemMapper.toRows(pageItems, counts),
+                        search,
+                        sort.name(),
+                        new PagingViewModel(
+                                pageSize,
+                                pageNumber,
+                                hasPrevious,
+                                hasNext
+                        )
+                ));
     }
 
     // endregion

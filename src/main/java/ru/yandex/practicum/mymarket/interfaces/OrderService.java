@@ -1,5 +1,7 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
 import java.util.List;
@@ -21,7 +23,7 @@ public interface OrderService {
      * @return Список моделей представления всех существующих заказов.
      * </return>
      **/
-    public List<OrderViewModel> findAll();
+    public Flux<OrderViewModel> findAll();
 
     /**
      * <summary>
@@ -32,7 +34,7 @@ public interface OrderService {
      * @return Сконвертированная модель представления заказа OrderViewModel.
      * </return>
      **/
-    public OrderViewModel findById(final long id);
+    public Mono<OrderViewModel> findById(final long id);
 
     /**
      * <summary>
@@ -44,7 +46,7 @@ public interface OrderService {
      * @return Уникальный идентификатор созданного заказа, либо -1, если корзина была пуста.
      * </return>
      **/
-    public long buy();
+    public Mono<Long> buy();
 
     // endregion
 }

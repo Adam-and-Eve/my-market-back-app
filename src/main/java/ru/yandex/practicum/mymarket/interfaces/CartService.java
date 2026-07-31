@@ -1,5 +1,6 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
 
@@ -23,7 +24,7 @@ public interface CartService {
      * @return Модель представления страницы корзины CartPageViewModel с подсчитанной итоговой стоимостью.
      * </return>
      **/
-    public CartPageViewModel findCart();
+    public Mono<CartPageViewModel> findCart();
 
     /**
      * <summary>
@@ -33,7 +34,7 @@ public interface CartService {
      * @param itemId Уникальный идентификатор товара, состояние которого изменяется.
      * @param cartAction Тип выполняемого действия над корзиной (PLUS, MINUS, DELETE).
      **/
-    public void updateItemCount(final long itemId, final CartActionEnumModel cartAction);
+    public Mono<Void> updateItemCount(final long itemId, final CartActionEnumModel cartAction);
 
     /**
      * <summary>
@@ -45,7 +46,7 @@ public interface CartService {
      * @return Карта (Map), где ключ — идентификатор товара, а значение — его количество в корзине.
      * </return>
      **/
-    public Map<Long, Integer> findCountsForItems(final List<Long> itemIds);
+    public Mono<Map<Long, Integer>> findCountsForItems(final List<Long> itemIds);
 
     /**
      * <summary>
@@ -56,7 +57,7 @@ public interface CartService {
      * @return Количество товара в корзине, либо 0, если товар отсутствует.
      * </return>
      **/
-    public int findCountForItem(final long itemId);
+    public Mono<Integer> findCountForItem(final long itemId);
 
     // endregion
 }

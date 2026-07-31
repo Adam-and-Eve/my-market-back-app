@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.mappers;
 
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.models.OrderItemModel;
@@ -97,9 +98,8 @@ public class ItemMapper {
      * </return>
      **/
     public ItemViewModel toViewModel(
-            final CartItemModel cartItem) {
-
-        var item = cartItem.getItem();
+            final CartItemModel cartItem,
+            final ItemModel item) {
 
         return new ItemViewModel(
                 item.getId(),
