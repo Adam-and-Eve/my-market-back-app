@@ -14,12 +14,12 @@ public class OrderModelTest {
 
     /**
      * <summary>
-     * Проверяет работу защищенного конструктора по умолчанию, необходимого для JPA-провайдера.
+     * Проверяет работу защищенного конструктора по умолчанию, необходимого для корректного восстановления сущности.
      * Сущность должна собираться с дефолтными значениями полей, пустым списком позиций и null-идентификатором.
      * </summary>
      **/
     @Test
-    void defaultConstructorShouldCreateInstanceWithDefaultState()
+    public void defaultConstructorShouldCreateInstanceWithDefaultState()
     {
         var order = new OrderModel();
 
@@ -38,7 +38,7 @@ public class OrderModelTest {
      * </summary>
      **/
     @Test
-    void createShouldReturnNewInstanceWithEmptyItems()
+    public void createShouldReturnNewInstanceWithEmptyItems()
     {
         var order = OrderModel.create();
 
@@ -53,11 +53,12 @@ public class OrderModelTest {
 
     /**
      * <summary>
-     * Проверяет успешное создание и добавление исторической позиции в список заказа на основе текущих метрик товара.
+     * Проверяет успешное создание и добавление исторической позиции в транзиентный список заказа на основе текущих метрик товара.
+     * Проверяется также корректная привязка идентификатора заказа к позиции (в данном сценарии — null до сохранения в репозитории).
      * </summary>
      **/
     @Test
-    void addItemShouldCreateAndAddOrderItemWithHistoricalData()
+    public void addItemShouldCreateAndAddOrderItemWithHistoricalData()
     {
         var order = OrderModel.create();
 
@@ -72,6 +73,8 @@ public class OrderModelTest {
         Assertions.assertEquals(1, items.size());
 
         var addedItem = items.getFirst();
+
+        Assertions.assertEquals(order.getId(), addedItem.getOrderId());
 
         Assertions.assertEquals(item.getTitle(), addedItem.getTitle());
 

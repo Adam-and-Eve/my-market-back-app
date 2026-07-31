@@ -10,12 +10,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.mappers.CartMapper;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
+import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.Collections;
 import java.util.List;
@@ -40,6 +45,9 @@ public class CartServiceImplTest {
     @Mock
     private ItemMapper itemMapper;
 
+    @Mock
+    private CartMapper cartMapper;
+
     @InjectMocks
     private CartServiceImpl cartService;
 
@@ -49,15 +57,18 @@ public class CartServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет сборку пустой корзины, когда в репозитории нет записей.
+     * Проверяет сборку пустой корзины, когда в реактивном репозитории нет записей.
      * </summary>
      **/
     @Test
     void findCartShouldReturnEmptyCartWhenNoItemsExist()
     {
-        Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Collections.emptyList());
+        Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.empty());
 
-        var cartPage = cartService.findCart();
+        Mockito.when(cartMapper.toViewModel(Collections.emptyList()))
+                .thenReturn(new CartPageViewModel(Collections.emptyList(), 0L));
+
+        var cartPage = cartService.findCart().block();
 
         Assertions.assertNotNull(cartPage);
 
@@ -68,7 +79,46 @@ public class CartServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет корректное добавление нового товара в корзину (когда его там еще не было).
+     * Проверяет сборку и маппинг наполненной корзины с получением данных из ItemRepository и правильной сигнатурой ItemMapper.
+     * </summary>
+     **/
+    @Test
+    void findCartShouldReturnPopulatedCartWhenItemsExist()
+    {
+        var itemId = 1L;
+
+        var cartItem = new CartItemModel(itemId, 2);
+
+        var itemModel = new ItemModel("Novation Launchkey 88", "MIDI-контроллер", "/novation.png", 45000L);
+
+        ReflectionTestUtils.setField(itemModel, "id", itemId);
+
+        var itemViewModel = new ItemViewModel(itemId, "Novation Launchkey 88", "MIDI-контроллер", "/novation.png", 45000L, 2);
+
+        var expectedPage = new CartPageViewModel(List.of(itemViewModel), 90000L);
+
+        Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.just(cartItem));
+
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(itemModel));
+
+        Mockito.when(itemMapper.toViewModel(cartItem, itemModel)).thenReturn(itemViewModel);
+
+        Mockito.when(cartMapper.toViewModel(List.of(itemViewModel))).thenReturn(expectedPage);
+
+        var cartPage = cartService.findCart().block();
+
+        Assertions.assertNotNull(cartPage);
+
+        Assertions.assertEquals(1, cartPage.items().size());
+
+        Assertions.assertEquals(90000L, cartPage.total());
+
+        Assertions.assertEquals("Novation Launchkey 88", cartPage.items().getFirst().title());
+    }
+
+    /**
+     * <summary>
+     * Проверяет корректное добавление нового товара в корзину (когда его там еще не было) со стартовым количеством.
      * </summary>
      **/
     @Test
@@ -80,11 +130,14 @@ public class CartServiceImplTest {
 
         ReflectionTestUtils.setField(itemModel, "id", itemId);
 
-        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Optional.empty());
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.empty());
 
-        Mockito.when(itemRepository.findById(itemId)).thenReturn(Optional.of(itemModel));
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(itemModel));
 
-        cartService.updateItemCount(itemId, CartActionEnumModel.PLUS);
+        Mockito.when(cartItemRepository.save(Mockito.any(CartItemModel.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        cartService.updateItemCount(itemId, CartActionEnumModel.PLUS).block();
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).save(Mockito.any(CartItemModel.class));
     }
@@ -99,13 +152,13 @@ public class CartServiceImplTest {
     {
         var itemId = 999L;
 
-        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Optional.empty());
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.empty());
 
-        Mockito.when(itemRepository.findById(itemId)).thenReturn(Optional.empty());
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.empty());
 
         var exception = Assertions.assertThrows(ResponseStatusException.class, () ->
         {
-            cartService.updateItemCount(itemId, CartActionEnumModel.PLUS);
+            cartService.updateItemCount(itemId, CartActionEnumModel.PLUS).block();
         });
 
         Assertions.assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
@@ -121,15 +174,17 @@ public class CartServiceImplTest {
     {
         var itemId = 1L;
 
-        var itemModel = new ItemModel("Товар", "Описание", "/img.png", 100L);
+        var cartItem = new CartItemModel(itemId, 1);
 
-        var cartItem = new CartItemModel(itemModel, 1);
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.just(cartItem));
 
-        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Optional.of(cartItem));
+        Mockito.when(cartItemRepository.delete(cartItem)).thenReturn(Mono.empty());
 
-        cartService.updateItemCount(itemId, CartActionEnumModel.MINUS);
+        cartService.updateItemCount(itemId, CartActionEnumModel.MINUS).block();
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).delete(cartItem);
+
+        Mockito.verify(cartItemRepository, Mockito.never()).save(Mockito.any());
     }
 
     /**
@@ -142,21 +197,20 @@ public class CartServiceImplTest {
     {
         var itemId = 1L;
 
-        var itemModel = new ItemModel("Товар", "Описание", "/img.png", 100L);
+        var cartItem = new CartItemModel(itemId, 5);
 
-        var cartItem = new CartItemModel(itemModel, 5);
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.just(cartItem));
 
-        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Optional.of(cartItem));
+        Mockito.when(cartItemRepository.delete(cartItem)).thenReturn(Mono.empty());
 
-        cartService.updateItemCount(itemId, CartActionEnumModel.DELETE);
+        cartService.updateItemCount(itemId, CartActionEnumModel.DELETE).block();
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).delete(cartItem);
     }
 
     /**
      * <summary>
-     * Проверяет пакетное получение мапы количеств товаров.
-     * Тест защищен от NPE благодаря ручной установке ID через ReflectionTestUtils.
+     * Проверяет пакетное получение мапы количеств товаров из реактивного потока.
      * </summary>
      **/
     @Test
@@ -168,21 +222,13 @@ public class CartServiceImplTest {
 
         var itemIds = List.of(itemId1, itemId2);
 
-        var item1 = new ItemModel("Товар 1", "Описание 1", "/img1.png", 150L);
+        var cartItem1 = new CartItemModel(itemId1, 2);
 
-        ReflectionTestUtils.setField(item1, "id", itemId1);
+        var cartItem2 = new CartItemModel(itemId2, 5);
 
-        var item2 = new ItemModel("Товар 2", "Описание 2", "/img2.png", 250L);
+        Mockito.when(cartItemRepository.findAllByItemIdIn(itemIds)).thenReturn(Flux.just(cartItem1, cartItem2));
 
-        ReflectionTestUtils.setField(item2, "id", itemId2);
-
-        var cartItem1 = new CartItemModel(item1, 2);
-
-        var cartItem2 = new CartItemModel(item2, 5);
-
-        Mockito.when(cartItemRepository.findAllByItemIdIn(itemIds)).thenReturn(List.of(cartItem1, cartItem2));
-
-        var resultMaps = cartService.findCountsForItems(itemIds);
+        var resultMaps = cartService.findCountsForItems(itemIds).block();
 
         Assertions.assertNotNull(resultMaps);
 
@@ -195,19 +241,55 @@ public class CartServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет, что findCountsForItems возвращает пустую мапу, если передан пустой список ID.
+     * Проверяет, что findCountsForItems возвращает пустую мапу, если передан пустой список ID, без обращений к репозиторию.
      * </summary>
      **/
     @Test
     void findCountsForItemsShouldReturnEmptyMapWhenParamIsEmpty()
     {
-        var result = cartService.findCountsForItems(Collections.emptyList());
+        var result = cartService.findCountsForItems(Collections.emptyList()).block();
 
         Assertions.assertNotNull(result);
 
         Assertions.assertTrue(result.isEmpty());
 
         Mockito.verifyNoInteractions(cartItemRepository);
+    }
+
+    /**
+     * <summary>
+     * Проверяет получение количества для конкретного товара, если он присутствует в корзине.
+     * </summary>
+     **/
+    @Test
+    void findCountForItemShouldReturnQuantityWhenItemExists()
+    {
+        var itemId = 5L;
+
+        var cartItem = new CartItemModel(itemId, 4);
+
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.just(cartItem));
+
+        var count = cartService.findCountForItem(itemId).block();
+
+        Assertions.assertEquals(4, count);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что метод возвращает 0, если запрашиваемый товар отсутствует в корзине.
+     * </summary>
+     **/
+    @Test
+    void findCountForItemShouldReturnZeroWhenItemDoesNotExist()
+    {
+        var itemId = 5L;
+
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.empty());
+
+        var count = cartService.findCountForItem(itemId).block();
+
+        Assertions.assertEquals(0, count);
     }
 
     // endregion

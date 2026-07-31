@@ -19,9 +19,9 @@ public class OrderItemModelTest {
      * </summary>
      **/
     @Test
-    void constructorShouldCreateNewInstanceWithValidArguments()
+    public void constructorShouldCreateNewInstanceWithValidArguments()
     {
-        var order = Mockito.mock(OrderModel.class);
+        var orderId = 1L;
 
         var title = "Клавиатура Novation Launchkey 88";
 
@@ -29,9 +29,13 @@ public class OrderItemModelTest {
 
         var quantity = 2;
 
-        var orderItem = new OrderItemModel(order, title, price, quantity);
+        var orderItem = new OrderItemModel(orderId, title, price, quantity);
 
         Assertions.assertNotNull(orderItem);
+
+        Assertions.assertNull(orderItem.getId());
+
+        Assertions.assertEquals(orderId, orderItem.getOrderId());
 
         Assertions.assertEquals(title, orderItem.getTitle());
 
@@ -42,16 +46,20 @@ public class OrderItemModelTest {
 
     /**
      * <summary>
-     * Проверяет работу защищенного конструктора по умолчанию, необходимого для JPA-провайдера.
-     * Сущность должна собираться с дефолтными значениями полей и null-идентификатором.
+     * Проверяет работу защищенного конструктора по умолчанию, необходимого для восстановления состояния сущности из БД.
+     * Сущность должна собираться с дефолтными значениями полей и null-идентификаторами.
      * </summary>
      **/
     @Test
-    void defaultConstructorShouldCreateInstanceWithDefaultState()
+    public void defaultConstructorShouldCreateInstanceWithDefaultState()
     {
         var orderItem = new OrderItemModel();
 
         Assertions.assertNotNull(orderItem);
+
+        Assertions.assertNull(orderItem.getId());
+
+        Assertions.assertNull(orderItem.getOrderId());
 
         Assertions.assertNull(orderItem.getTitle());
 

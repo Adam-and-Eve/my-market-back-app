@@ -13,6 +13,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
@@ -57,23 +59,27 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет, что метод возвращает полный список доменных моделей товаров из репозитория.
+     * Проверяет, что метод возвращает полный список доменных моделей товаров, собранных из реактивного потока Flux.
      * </summary>
      **/
     @Test
     void findAllShouldReturnListOfItemsFromRepository()
     {
-        var expectedItems = List.of(
-                new ItemModel("Novation Launchkey", "Studio MIDI", "/img1.png", 45000L),
-                new ItemModel("Xiaomi Mi Mix 4", "Flagship Phone", "/img2.png", 60000L)
-        );
-        Mockito.when(itemRepository.findAll()).thenReturn(expectedItems);
+        var item1 = new ItemModel("Novation Launchkey", "Studio MIDI", "/img1.png", 45000L);
 
-        var actualItems = itemService.findAll();
+        var item2 = new ItemModel("Xiaomi Mi Mix 4", "Flagship Phone", "/img2.png", 60000L);
 
-        Assertions.assertEquals(expectedItems.size(), actualItems.size());
+        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item1, item2));
 
-        Assertions.assertEquals(expectedItems, actualItems);
+        var actualItems = itemService.findAll().collectList().block();
+
+        Assertions.assertNotNull(actualItems);
+
+        Assertions.assertEquals(2, actualItems.size());
+
+        Assertions.assertEquals("Novation Launchkey", actualItems.get(0).getTitle());
+
+        Assertions.assertEquals("Xiaomi Mi Mix 4", actualItems.get(1).getTitle());
 
         Mockito.verify(itemRepository, Mockito.times(1)).findAll();
     }
@@ -84,7 +90,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет успешное получение и маппинг обогащенной View-модели товара при его наличии в БД.
+     * Проверяет успешное получение и маппинг обогащенной View-модели товара из реактивных источников при его наличии в БД.
      * </summary>
      **/
     @Test
@@ -100,13 +106,13 @@ public class ItemServiceImplTest {
 
         var expectedViewModel = new ItemViewModel(itemId, "Novation Launchkey", "Studio MIDI", "/img1.png", 45000L, cartCount);
 
-        Mockito.when(itemRepository.findById(itemId)).thenReturn(Optional.of(itemModel));
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(itemModel));
 
-        Mockito.when(cartService.findCountForItem(itemId)).thenReturn(cartCount);
+        Mockito.when(cartService.findCountForItem(itemId)).thenReturn(Mono.just(cartCount));
 
         Mockito.when(itemMapper.toViewModel(itemModel, cartCount)).thenReturn(expectedViewModel);
 
-        var actualViewModel = itemService.findById(itemId);
+        var actualViewModel = itemService.findById(itemId).block();
 
         Assertions.assertNotNull(actualViewModel);
 
@@ -117,7 +123,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет генерацию исключения ResponseStatusException со статусом 404 NOT FOUND, если товар отсутствует.
+     * Проверяет генерацию исключения ResponseStatusException со статусом 404 NOT FOUND из Mono.error(), если товар отсутствует.
      * </summary>
      **/
     @Test
@@ -125,10 +131,10 @@ public class ItemServiceImplTest {
     {
         long nonExistingId = 999L;
 
-        Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Optional.empty());
+        Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Mono.empty());
 
         var exception = Assertions.assertThrows(ResponseStatusException.class, () -> {
-            itemService.findById(nonExistingId);
+            itemService.findById(nonExistingId).block();
         });
 
         Assertions.assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
@@ -142,7 +148,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет извлечение чистой доменной модели по идентификатору товара.
+     * Проверяет извлечение чистой доменной модели по идентификатору товара через Mono.
      * </summary>
      **/
     @Test
@@ -152,9 +158,9 @@ public class ItemServiceImplTest {
 
         var expectedModel = new ItemModel("Xiaomi Mi Mix 4", "Flagship Phone", "/img2.png", 60000L);
 
-        Mockito.when(itemRepository.findById(itemId)).thenReturn(Optional.of(expectedModel));
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(expectedModel));
 
-        var actualModel = itemService.findModelById(itemId);
+        var actualModel = itemService.findModelById(itemId).block();
 
         Assertions.assertNotNull(actualModel);
 
@@ -163,7 +169,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет генерацию 404 ошибки при поиске доменной модели несуществующего товара.
+     * Проверяет генерацию 404 ошибки в реактивном потоке при поиске доменной модели несуществующего товара.
      * </summary>
      **/
     @Test
@@ -171,13 +177,15 @@ public class ItemServiceImplTest {
     {
         long nonExistingId = 999L;
 
-        Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Optional.empty());
+        Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Mono.empty());
 
         var exception = Assertions.assertThrows(ResponseStatusException.class, () -> {
-            itemService.findModelById(nonExistingId);
+            itemService.findModelById(nonExistingId).block();
         });
 
         Assertions.assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
+
+        Assertions.assertEquals("Item not found.", exception.getReason());
     }
 
     // endregion
@@ -186,7 +194,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет сборку нефильтрованной страницы каталога, когда поисковая строка пуста или нормализуется в пустую.
+     * Проверяет сборку нефильтрованной страницы каталога с корректным моканием предикатов и компараторов CatalogHelper.
      * </summary>
      **/
     @Test
@@ -202,17 +210,11 @@ public class ItemServiceImplTest {
 
         var pageSize = 10;
 
-        var sortOrder = Sort.unsorted();
-
-        var pageable = PageRequest.of(0, 10, sortOrder);
-
         var item = new ItemModel("Товар", "Описание", "/img.png", 100L);
 
         ReflectionTestUtils.setField(item, "id", 1L);
 
         var itemsList = List.of(item);
-
-        var itemsPage = new PageImpl<>(itemsList, pageable, 1);
 
         var mockCounts = Map.of(item.getId(), 2);
 
@@ -222,30 +224,28 @@ public class ItemServiceImplTest {
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveSort(Mockito.any(ItemSortEnumModel.class))).thenReturn(sortOrder);
+        Mockito.when(catalogHelper.matchesSearch(normalizedSearch)).thenReturn(i -> true);
 
-        Mockito.when(itemRepository.findAll(pageable)).thenReturn(itemsPage);
+        Mockito.when(catalogHelper.resolveComparator(Mockito.any(ItemSortEnumModel.class))).thenReturn((a, b) -> 0);
 
-        Mockito.when(cartService.findCountsForItems(Mockito.anyList())).thenReturn(mockCounts);
+        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item));
+
+        Mockito.when(cartService.findCountsForItems(List.of(1L))).thenReturn(Mono.just(mockCounts));
 
         Mockito.when(itemMapper.toRows(itemsList, mockCounts)).thenReturn(Collections.emptyList());
 
-        var catalogResult = itemService.findCatalog(rawSearch, rawSort, pageNumber, pageSize);
+        var catalogResult = itemService.findCatalog(rawSearch, rawSort, pageNumber, pageSize).block();
 
         Assertions.assertNotNull(catalogResult);
 
         Assertions.assertEquals(normalizedSearch, catalogResult.search());
 
-        Mockito.verify(itemRepository, Mockito.times(1)).findAll(pageable);
-
-        Mockito.verify(itemRepository, Mockito.never()).findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                Mockito.anyString(), Mockito.anyString(), Mockito.any(PageRequest.class)
-        );
+        Mockito.verify(itemRepository, Mockito.times(1)).findAll();
     }
 
     /**
      * <summary>
-     * Проверяет сборку страницы каталога с фильтрацией по поисковой строке (поиск без учета регистра).
+     * Проверяет сборку страницы каталога с фильтрацией на уровне приложения по поисковой строке.
      * </summary>
      **/
     @Test
@@ -261,19 +261,15 @@ public class ItemServiceImplTest {
 
         var pageSize = 5;
 
-        var sortOrder = Sort.unsorted();
+        var matchingItem = new ItemModel("Novation Launchkey 88", "MIDI", "/img.png", 45000L);
 
-        var pageable = PageRequest.of(0, 5, sortOrder);
+        ReflectionTestUtils.setField(matchingItem, "id", 1L);
 
-        var item = new ItemModel("Novation Launchkey 88", "MIDI", "/img.png", 45000L);
+        var nonMatchingItem = new ItemModel("Xiaomi Mi Mix 4", "Phone", "/img2.png", 60000L);
 
-        ReflectionTestUtils.setField(item, "id", 1L);
+        ReflectionTestUtils.setField(nonMatchingItem, "id", 2L);
 
-        var itemsList = List.of(item);
-
-        var itemsPage = new PageImpl<>(itemsList, pageable, 1);
-
-        var mockCounts = Map.of(item.getId(), 1);
+        var mockCounts = Map.of(matchingItem.getId(), 1);
 
         Mockito.when(catalogHelper.normalizeSearch(rawSearch)).thenReturn(normalizedSearch);
 
@@ -281,25 +277,24 @@ public class ItemServiceImplTest {
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveSort(Mockito.any(ItemSortEnumModel.class))).thenReturn(sortOrder);
+        Mockito.when(catalogHelper.matchesSearch(normalizedSearch))
+                .thenReturn(item -> item.getTitle().toLowerCase().contains(normalizedSearch));
 
-        Mockito.when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                normalizedSearch, normalizedSearch, pageable)).thenReturn(itemsPage);
+        Mockito.when(catalogHelper.resolveComparator(Mockito.any(ItemSortEnumModel.class))).thenReturn((a, b) -> 0);
 
-        Mockito.when(cartService.findCountsForItems(Mockito.anyList())).thenReturn(mockCounts);
+        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(matchingItem, nonMatchingItem));
 
-        Mockito.when(itemMapper.toRows(itemsList, mockCounts)).thenReturn(Collections.emptyList());
+        Mockito.when(cartService.findCountsForItems(List.of(1L))).thenReturn(Mono.just(mockCounts));
 
-        var catalogResult = itemService.findCatalog(rawSearch, rawSort, pageNumber, pageSize);
+        Mockito.when(itemMapper.toRows(List.of(matchingItem), mockCounts)).thenReturn(Collections.emptyList());
+
+        var catalogResult = itemService.findCatalog(rawSearch, rawSort, pageNumber, pageSize).block();
 
         Assertions.assertNotNull(catalogResult);
 
         Assertions.assertEquals(normalizedSearch, catalogResult.search());
 
-        Mockito.verify(itemRepository, Mockito.times(1))
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch, pageable);
-
-        Mockito.verify(itemRepository, Mockito.never()).findAll(pageable);
+        Mockito.verify(itemRepository, Mockito.times(1)).findAll();
     }
 
     // endregion

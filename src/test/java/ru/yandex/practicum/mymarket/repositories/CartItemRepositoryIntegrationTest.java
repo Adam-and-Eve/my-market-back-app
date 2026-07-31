@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.repositories;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
@@ -26,6 +27,7 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
 
     // endregion
 
+
     // region Tests
 
     /**
@@ -38,24 +40,25 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
     {
         var item = new ItemModel("Novation Launchkey 88", "MIDI-контроллер", "/novation.png", 45000L);
 
-        itemRepository.save(item);
+        var savedItem = itemRepository.save(item).block();
+        Assertions.assertNotNull(savedItem);
 
-        var cartItem = new CartItemModel(item, 1);
+        var cartItem = new CartItemModel(savedItem, 1);
 
-        cartItemRepository.save(cartItem);
+        cartItemRepository.save(cartItem).block();
 
-        var result = cartItemRepository.findByItemId(item.getId());
+        var result = cartItemRepository.findByItemId(savedItem.getId()).blockOptional();
 
         Assertions.assertTrue(result.isPresent());
 
-        Assertions.assertEquals(item.getId(), result.get().getItem().getId());
+        Assertions.assertEquals(savedItem.getId(), result.get().getItemId());
 
         Assertions.assertEquals(1, result.get().getQuantity());
     }
 
     /**
      * <summary>
-     * Проверяет, что поиск по идентификатору товара возвращает Optional.empty(), если такого товара нет в корзине.
+     * Проверяет, что поиск по идентификатору товара возвращает пустой контейнер Mono, если такого товара нет в корзине.
      * </summary>
      **/
     @Test
@@ -63,16 +66,18 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
     {
         var item = new ItemModel(" Xiaomi Mi Mix 4", "Смартфон", "/xiaomi.png", 60000L);
 
-        itemRepository.save(item);
+        var savedItem = itemRepository.save(item).block();
 
-        var result = cartItemRepository.findByItemId(item.getId());
+        Assertions.assertNotNull(savedItem);
+
+        var result = cartItemRepository.findByItemId(savedItem.getId()).blockOptional();
 
         Assertions.assertTrue(result.isEmpty());
     }
 
     /**
      * <summary>
-     * Проверяет пакетную выборку элементов корзины по списку идентификаторов товаров (In-запрос).
+     * Проверяет пакетную реактивную выборку элементов корзины по списку идентификаторов товаров (In-запрос).
      * </summary>
      **/
     @Test
@@ -84,23 +89,33 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
 
         var item3 = new ItemModel("Товар 3", "Описание 3", "/img3.png", 3000L);
 
-        itemRepository.saveAll(List.of(item1, item2, item3));
+        var savedItems = itemRepository.saveAll(List.of(item1, item2, item3)).collectList().block();
 
-        var cartItem1 = new CartItemModel(item1, 5);
+        Assertions.assertNotNull(savedItems);
 
-        var cartItem2 = new CartItemModel(item2, 2);
+        var s1 = savedItems.get(0);
 
-        cartItemRepository.saveAll(List.of(cartItem1, cartItem2));
+        var s2 = savedItems.get(1);
 
-        var targetIds = List.of(item1.getId(), item2.getId(), item3.getId());
+        var s3 = savedItems.get(2);
 
-        var result = cartItemRepository.findAllByItemIdIn(targetIds);
+        var cartItem1 = new CartItemModel(s1, 5);
+
+        var cartItem2 = new CartItemModel(s2, 2);
+
+        cartItemRepository.saveAll(List.of(cartItem1, cartItem2)).collectList().block();
+
+        var targetIds = List.of(s1.getId(), s2.getId(), s3.getId());
+
+        var result = cartItemRepository.findAllByItemIdIn(targetIds).collectList().block();
+
+        Assertions.assertNotNull(result);
 
         Assertions.assertEquals(2, result.size());
 
-        var containsItem1 = result.stream().anyMatch(ci -> ci.getItem().getId().equals(item1.getId()));
+        var containsItem1 = result.stream().anyMatch(ci -> ci.getItemId().equals(s1.getId()));
 
-        var containsItem2 = result.stream().anyMatch(ci -> ci.getItem().getId().equals(item2.getId()));
+        var containsItem2 = result.stream().anyMatch(ci -> ci.getItemId().equals(s2.getId()));
 
         Assertions.assertTrue(containsItem1);
 
@@ -121,34 +136,37 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
 
         var itemC = new ItemModel("Клавиатура C", "Описание C", "/imgC.png", 3000L);
 
+        var sA = itemRepository.save(itemA).block();
 
-        itemRepository.save(itemA);
+        var sB = itemRepository.save(itemB).block();
 
-        itemRepository.save(itemB);
+        var sC = itemRepository.save(itemC).block();
 
-        itemRepository.save(itemC);
+        Assertions.assertNotNull(sA);
 
-        var cartItemC = new CartItemModel(itemC, 1);
+        Assertions.assertNotNull(sB);
 
-        var cartItemA = new CartItemModel(itemA, 3);
+        Assertions.assertNotNull(sC);
 
-        var cartItemB = new CartItemModel(itemB, 2);
+        var cartItemC = new CartItemModel(sC, 1);
 
-        cartItemRepository.save(cartItemC);
+        var cartItemA = new CartItemModel(sA, 3);
 
-        cartItemRepository.save(cartItemA);
+        var cartItemB = new CartItemModel(sB, 2);
 
-        cartItemRepository.save(cartItemB);
+        cartItemRepository.saveAll(List.of(cartItemC, cartItemA, cartItemB)).collectList().block();
 
-        var sortedCartItems = cartItemRepository.findAllByOrderByItemIdAsc();
+        var sortedCartItems = cartItemRepository.findAllByOrderByItemIdAsc().collectList().block();
+
+        Assertions.assertNotNull(sortedCartItems);
 
         Assertions.assertEquals(3, sortedCartItems.size());
 
-        Assertions.assertEquals(itemA.getId(), sortedCartItems.get(0).getItem().getId());
+        Assertions.assertEquals(sA.getId(), sortedCartItems.get(0).getItemId());
 
-        Assertions.assertEquals(itemB.getId(), sortedCartItems.get(1).getItem().getId());
+        Assertions.assertEquals(sB.getId(), sortedCartItems.get(1).getItemId());
 
-        Assertions.assertEquals(itemC.getId(), sortedCartItems.get(2).getItem().getId());
+        Assertions.assertEquals(sC.getId(), sortedCartItems.get(2).getItemId());
     }
 
     // endregion

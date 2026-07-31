@@ -14,11 +14,12 @@ public class CartItemModelTest {
 
     /**
      * <summary>
-     * Проверяет успешное создание нового элемента корзины со всеми переданными параметрами через публичный конструктор.
+     * Проверяет успешное создание нового элемента корзины через конструктор со связанной доменной моделью товара.
+     * Идентификатор itemId должен автоматически синхронизироваться с идентификатором переданного товара.
      * </summary>
      **/
     @Test
-    void constructorShouldCreateNewInstanceWithValidArguments()
+    public void constructorWithItemShouldCreateNewInstanceWithValidArguments()
     {
         var item = new ItemModel("Клавиатура Novation", "MIDI-контроллер", "/images/novation.png", 45000L);
 
@@ -28,23 +29,57 @@ public class CartItemModelTest {
 
         Assertions.assertNotNull(cartItem);
 
+        Assertions.assertNull(cartItem.getId());
+
         Assertions.assertEquals(item, cartItem.getItem());
+
+        Assertions.assertEquals(item.getId(), cartItem.getItemId());
 
         Assertions.assertEquals(quantity, cartItem.getQuantity());
     }
 
     /**
      * <summary>
-     * Проверяет работу защищенного конструктора по умолчанию, необходимого для JPA-провайдера.
-     * Сущность должна собираться с дефолтными значениями полей и null-идентификатором.
+     * Проверяет успешное создание нового элемента корзины через конструктор с прямым указанием идентификатора товара.
+     * При этом транзиентная ссылка на доменную модель товара должна оставаться null.
      * </summary>
      **/
     @Test
-    void defaultConstructorShouldCreateInstanceWithDefaultState()
+    public void constructorWithItemIdShouldCreateNewInstanceWithValidArguments()
+    {
+        var itemId = 42L;
+
+        var quantity = 2;
+
+        var cartItem = new CartItemModel(itemId, quantity);
+
+        Assertions.assertNotNull(cartItem);
+
+        Assertions.assertNull(cartItem.getId());
+
+        Assertions.assertEquals(itemId, cartItem.getItemId());
+
+        Assertions.assertNull(cartItem.getItem());
+
+        Assertions.assertEquals(quantity, cartItem.getQuantity());
+    }
+
+    /**
+     * <summary>
+     * Проверяет работу защищенного конструктора по умолчанию, необходимого для маппинга данных репозиторием.
+     * Сущность должна собираться с дефолтными значениями полей, null-идентификаторами и нулевым количеством.
+     * </summary>
+     **/
+    @Test
+    public void defaultConstructorShouldCreateInstanceWithDefaultState()
     {
         var cartItem = new CartItemModel();
 
         Assertions.assertNotNull(cartItem);
+
+        Assertions.assertNull(cartItem.getId());
+
+        Assertions.assertNull(cartItem.getItemId());
 
         Assertions.assertNull(cartItem.getItem());
 
@@ -57,7 +92,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-    void increaseShouldIncrementQuantity()
+    public void increaseShouldIncrementQuantity()
     {
         var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
 
@@ -74,7 +109,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-    void decreaseShouldDecrementQuantityWhenQuantityIsGreaterThanZero()
+   public  void decreaseShouldDecrementQuantityWhenQuantityIsGreaterThanZero()
     {
         var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
 
@@ -91,7 +126,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-    void decreaseShouldNotDecrementQuantityWhenQuantityIsZero()
+    public void decreaseShouldNotDecrementQuantityWhenQuantityIsZero()
     {
         var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
 

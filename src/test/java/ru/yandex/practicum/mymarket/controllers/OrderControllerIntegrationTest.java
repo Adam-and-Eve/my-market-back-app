@@ -1,10 +1,13 @@
 package ru.yandex.practicum.mymarket.controllers;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
@@ -30,11 +33,11 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
     /**
      * <summary>
-     * Проверяет отображение страницы списка всех оформленных заказов пользователя.
+     * Проверяет отображение страницы списка всех оформленных заказов пользователя из реактивного Flux.
      * </summary>
      **/
     @Test
-    public void getOrdersShouldReturnJournalPageWithOrdersList() throws Exception
+    public void getOrdersShouldReturnJournalPageWithOrdersList()
     {
         var keychronKeyboard = new ItemViewModel(
                 2L,
@@ -47,15 +50,19 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
         var mockOrder = new OrderViewModel(101L, List.of(keychronKeyboard), 22500L);
 
-        var ordersList = List.of(mockOrder);
+        Mockito.when(orderService.findAll()).thenReturn(Flux.just(mockOrder));
 
-        Mockito.when(orderService.findAll()).thenReturn(ordersList);
+        webTestClient.get().uri("/orders")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(htmlBody -> {
+                    assert htmlBody != null;
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/orders"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("orders"))
-                .andExpect(MockMvcResultMatchers.model().attributeExists("orders"))
-                .andExpect(MockMvcResultMatchers.model().attribute("orders", ordersList));
+                    Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
+
+                    Assertions.assertTrue(htmlBody.contains("101"));
+                });
     }
 
     /**
@@ -64,7 +71,7 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
      * </summary>
      **/
     @Test
-    public void getOrderShouldReturnOrderDetailsWithoutWelcomeMessage() throws Exception
+    public void getOrderShouldReturnOrderDetailsWithoutWelcomeMessage()
     {
         var orderId = 101L;
 
@@ -79,35 +86,40 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
         var mockOrder = new OrderViewModel(orderId, List.of(logitechMouse), 33600L);
 
-        Mockito.when(orderService.findById(orderId)).thenReturn(mockOrder);
+        Mockito.when(orderService.findById(orderId)).thenReturn(Mono.just(mockOrder));
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/orders/{id}", orderId))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("order"))
-                .andExpect(MockMvcResultMatchers.model().attributeExists("order", "newOrder"))
-                .andExpect(MockMvcResultMatchers.model().attribute("order", mockOrder))
-                .andExpect(MockMvcResultMatchers.model().attribute("newOrder", false));
+        webTestClient.get().uri("/orders/{id}", orderId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(htmlBody -> {
+                    assert htmlBody != null;
+
+                    Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
+                });
     }
 
     /**
      * <summary>
-     * Проверяет передачу флага newOrder в модель для вывода приветственного сообщения только что созданному заказу.
+     * Проверяет передачу флага newOrder в запросе для вывода приветственного сообщения.
      * </summary>
      **/
     @Test
-    public void getOrderWithNewOrderParamTrueShouldPassFlagToModel() throws Exception
+    public void getOrderWithNewOrderParamTrueShouldPassFlagToModel()
     {
         var orderId = 102L;
 
         var mockOrder = new OrderViewModel(orderId, List.of(), 0L);
 
-        Mockito.when(orderService.findById(orderId)).thenReturn(mockOrder);
+        Mockito.when(orderService.findById(orderId)).thenReturn(Mono.just(mockOrder));
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/orders/{id}", orderId)
-                        .param("newOrder", "true"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("order"))
-                .andExpect(MockMvcResultMatchers.model().attribute("newOrder", true));
+        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/orders/{id}")
+                        .queryParam("newOrder", "true")
+                        .build(orderId))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(Assertions::assertNotNull);
     }
 
     /**
@@ -116,15 +128,18 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
      * </summary>
      **/
     @Test
-    public void buyShouldCreateOrderAndRedirectToReceiptPageWhenCartIsNotEmpty() throws Exception
+    public void buyShouldCreateOrderAndRedirectToReceiptPageWhenCartIsNotEmpty()
     {
         var expectedOrderId = 42L;
 
-        Mockito.when(orderService.buy()).thenReturn(expectedOrderId);
+        Mockito.when(orderService.buy()).thenReturn(Mono.just(expectedOrderId));
 
-        mockMvc.perform(MockMvcRequestBuilders.post("/buy"))
-                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
-                .andExpect(MockMvcResultMatchers.redirectedUrl("/orders/42?newOrder=true"));
+        webTestClient.post().uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/orders/42?newOrder=true");
+
+        Mockito.verify(orderService, Mockito.times(1)).buy();
     }
 
     /**
@@ -133,13 +148,16 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
      * </summary>
      **/
     @Test
-    public void buyShouldRedirectBackToCartPageWhenCartIsEmpty() throws Exception
+    public void buyShouldRedirectBackToCartPageWhenCartIsEmpty()
     {
-        Mockito.when(orderService.buy()).thenReturn(-1L);
+        Mockito.when(orderService.buy()).thenReturn(Mono.just(-1L));
 
-        mockMvc.perform(MockMvcRequestBuilders.post("/buy"))
-                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
-                .andExpect(MockMvcResultMatchers.redirectedUrl("/cart/items"));
+        webTestClient.post().uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/cart/items");
+
+        Mockito.verify(orderService, Mockito.times(1)).buy();
     }
 
     // endregion

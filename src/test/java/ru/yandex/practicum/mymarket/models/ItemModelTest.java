@@ -18,7 +18,7 @@ public class ItemModelTest {
      * </summary>
      **/
     @Test
-    void constructorShouldCreateNewInstanceWithValidArguments()
+    public void constructorShouldCreateNewInstanceWithValidArguments()
     {
         var title = "Клавиатура Novation Launchkey 88";
 
@@ -45,12 +45,12 @@ public class ItemModelTest {
 
     /**
      * <summary>
-     * Проверяет работу защищенного конструктора по умолчанию, необходимого для JPA-провайдера.
+     * Проверяет работу защищенного конструктора по умолчанию, необходимого для корректного восстановления сущности маппером Spring Data.
      * Сущность должна собираться с дефолтными значениями полей и null-идентификатором.
      * </summary>
      **/
     @Test
-    void defaultConstructorShouldCreateInstanceWithDefaultState()
+    public void defaultConstructorShouldCreateInstanceWithDefaultState()
     {
         var item = new ItemModel();
 
@@ -73,7 +73,7 @@ public class ItemModelTest {
      * </summary>
      **/
     @Test
-    void constructorShouldAllowZeroPrice()
+    public void constructorShouldAllowZeroPrice()
     {
         var title = "Подарочный стикер";
 

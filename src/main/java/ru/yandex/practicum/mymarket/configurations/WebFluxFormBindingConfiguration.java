@@ -46,7 +46,8 @@ public class WebFluxFormBindingConfiguration {
 
                             URI mutatedUri = UriComponentsBuilder.fromUri(request.getURI())
                                     .queryParams(formData)
-                                    .build(true)
+                                    .encode()
+                                    .build()
                                     .toUri();
 
                             ServerHttpRequest mutatedRequest = request.mutate()
