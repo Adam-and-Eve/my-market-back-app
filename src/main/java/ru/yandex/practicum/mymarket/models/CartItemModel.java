@@ -51,12 +51,29 @@ public class CartItemModel {
     }
 
     public CartItemModel(final ItemModel item, final int quantity) {
+
+        if (item == null) {
+            throw new IllegalArgumentException("Модель товара не может быть null");
+        }
+
+        if (quantity < 0) {
+            throw new IllegalArgumentException("Количество товара в корзине не может быть отрицательным");
+        }
+
         this.item = item;
         this.itemId = item.getId();
         this.quantity = quantity;
     }
 
     public CartItemModel(final Long itemId, final int quantity) {
+
+        if (itemId == null) {
+            throw new IllegalArgumentException("Идентификатор товара не может быть null");
+        }
+        if (quantity < 0) {
+            throw new IllegalArgumentException("Количество товара в корзине не может быть отрицательным");
+        }
+
         this.itemId = itemId;
         this.quantity = quantity;
     }

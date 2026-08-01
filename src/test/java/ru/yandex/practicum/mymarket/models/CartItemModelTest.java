@@ -19,8 +19,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-    public void constructorWithItemShouldCreateNewInstanceWithValidArguments()
-    {
+    public void constructorWithItemShouldCreateNewInstanceWithValidArguments() {
         var item = new ItemModel("Клавиатура Novation", "MIDI-контроллер", "/images/novation.png", 45000L);
 
         var quantity = 3;
@@ -40,13 +39,38 @@ public class CartItemModelTest {
 
     /**
      * <summary>
+     * Проверяет выброс исключения при передаче null-модели товара в конструктор.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNullItemShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel((ItemModel) null, 1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче отрицательного количества товара в конструктор с моделью.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNegativeQuantityAndItemShouldThrowException() {
+        var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(item, -1);
+        });
+    }
+
+    /**
+     * <summary>
      * Проверяет успешное создание нового элемента корзины через конструктор с прямым указанием идентификатора товара.
      * При этом транзиентная ссылка на доменную модель товара должна оставаться null.
      * </summary>
      **/
     @Test
-    public void constructorWithItemIdShouldCreateNewInstanceWithValidArguments()
-    {
+    public void constructorWithItemIdShouldCreateNewInstanceWithValidArguments() {
         var itemId = 42L;
 
         var quantity = 2;
@@ -66,13 +90,36 @@ public class CartItemModelTest {
 
     /**
      * <summary>
+     * Проверяет выброс исключения при передаче null-идентификатора товара в конструктор.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNullItemIdShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel((Long) null, 1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче отрицательного количества товара в конструктор с идентификатором.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNegativeQuantityAndItemIdShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(42L, -1);
+        });
+    }
+
+    /**
+     * <summary>
      * Проверяет работу защищенного конструктора по умолчанию, необходимого для маппинга данных репозиторием.
      * Сущность должна собираться с дефолтными значениями полей, null-идентификаторами и нулевым количеством.
      * </summary>
      **/
     @Test
-    public void defaultConstructorShouldCreateInstanceWithDefaultState()
-    {
+    public void defaultConstructorShouldCreateInstanceWithDefaultState() {
         var cartItem = new CartItemModel();
 
         Assertions.assertNotNull(cartItem);
@@ -92,8 +139,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-    public void increaseShouldIncrementQuantity()
-    {
+    public void increaseShouldIncrementQuantity() {
         var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
 
         var cartItem = new CartItemModel(item, 1);
@@ -109,8 +155,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-   public  void decreaseShouldDecrementQuantityWhenQuantityIsGreaterThanZero()
-    {
+    public void decreaseShouldDecrementQuantityWhenQuantityIsGreaterThanZero() {
         var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
 
         var cartItem = new CartItemModel(item, 5);
@@ -126,8 +171,7 @@ public class CartItemModelTest {
      * </summary>
      **/
     @Test
-    public void decreaseShouldNotDecrementQuantityWhenQuantityIsZero()
-    {
+    public void decreaseShouldNotDecrementQuantityWhenQuantityIsZero() {
         var item = new ItemModel("Товар", "Описание", "/path.png", 100L);
 
         var cartItem = new CartItemModel(item, 0);

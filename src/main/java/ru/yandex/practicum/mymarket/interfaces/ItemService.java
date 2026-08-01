@@ -7,8 +7,6 @@ import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
-import java.util.List;
-
 /**
  * <summary>
  * Контракт сервиса для управления каталогом товаров.

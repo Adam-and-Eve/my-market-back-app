@@ -29,13 +29,6 @@ public class OrderServiceImpl implements OrderService {
 
     // region Fields
 
-    private final ItemRepository itemRepository;
-
-    /**
-     * Репозиторий для управления персистентным состоянием элементов корзины покупателя.
-     **/
-    private final CartItemRepository cartItemRepository;
-
     /**
      * Репозиторий для выполнения операций над доменными моделями заказов.
      **/
@@ -58,14 +51,10 @@ public class OrderServiceImpl implements OrderService {
     // region Constructors
 
     public OrderServiceImpl(
-            final ItemRepository itemRepository,
-            final CartItemRepository cartItemRepository,
             final OrderRepository orderRepository,
             final OrderItemRepository orderItemRepository,
             final OrderMapper orderMapper) {
 
-        this.itemRepository = itemRepository;
-        this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.orderMapper = orderMapper;
@@ -87,7 +76,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public Flux<OrderViewModel> findAll() {
         return orderRepository.findAllByOrderByIdAsc()
-                .flatMap(orderMapper::toViewModel);
+                .flatMap(this::buildOrderViewModel);
     }
 
     /**
@@ -106,73 +95,22 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository
                 .findById(id)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found.")))
-                .flatMap(orderMapper::toViewModel);
+                .flatMap(this::buildOrderViewModel);
     }
-
 
     /**
      * <summary>
-     * Оформляет транзакцию покупки: выгружает все элементы из текущей корзины покупателя, переносит их
-     * в историческую структуру нового заказа с фиксацией цен, сохраняет заказ в БД и полностью очищает корзину.
+     * Вспомогательный метод для асинхронной загрузки позиций заказа из репозитория и формирования итоговой View Model через маппер.
      * </summary>
+     * @param order Исходная доменная модель заказа.
      * <return>
-     * @return Уникальный идентификатор созданного заказа, либо -1, если корзина покупателя оказалась пуста.
+     * @return Реактивный контейнер Mono с собранной моделью представления OrderViewModel.
      * </return>
      **/
-    @Transactional()
-    @Override
-    public Mono<Long> buy() {
-        return cartItemRepository.findAllByOrderByItemIdAsc()
+    private Mono<OrderViewModel> buildOrderViewModel(final OrderModel order) {
+        return orderItemRepository.findAllByOrderIdOrderByIdAsc(order.getId())
                 .collectList()
-                .flatMap(cartItems -> {
-                    if (cartItems.isEmpty()) {
-                        return Mono.just(-1L);
-                    }
-
-                    return saveOrder(cartItems);
-                });
-    }
-
-    /**
-     * <summary>
-     * Преобразует плоский список элементов корзины в реактивный поток исторических позиций создаваемого заказа.
-     * </summary>
-     * @param orderId Уникальный идентификатор созданного родительского заказа.
-     * @param cartItems Список элементов корзины, подлежащих переносу в заказ.
-     * <return>
-     * @return Реактивный поток созданных исторических позиций заказа Flux.
-     * </return>
-     **/
-    private Flux<OrderItemModel> createOrderItems(
-            final long orderId,
-            final List<CartItemModel> cartItems) {
-
-        return Flux.fromIterable(cartItems)
-                .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
-                        .map(item -> new OrderItemModel(
-                                orderId,
-                                item.getTitle(),
-                                item.getPrice(),
-                                cartItem.getQuantity()
-                        )));
-    }
-
-    /**
-     * <summary>
-     * Атомарно сохраняет шапку нового заказа, генерирует и записывает его позиции,
-     * после чего производит полную очистку текущей корзины покупателя.
-     * </summary>
-     * @param cartItems Список элементов корзины для сохранения в составе заказа.
-     * <return>
-     * @return Моно-контейнер с уникальным идентификатором успешно сохраненного заказа.
-     * </return>
-     **/
-    private Mono<Long> saveOrder(final List<CartItemModel> cartItems) {
-        return orderRepository.save(OrderModel.create())
-                .flatMap(savedOrder -> createOrderItems(savedOrder.getId(), cartItems)
-                        .as(orderItemRepository::saveAll)
-                        .then(cartItemRepository.deleteAll(cartItems))
-                        .thenReturn(savedOrder.getId()));
+                .map(orderItems -> orderMapper.toViewModel(order, orderItems));
     }
 
     // endregion

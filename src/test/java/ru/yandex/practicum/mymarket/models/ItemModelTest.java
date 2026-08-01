@@ -18,8 +18,7 @@ public class ItemModelTest {
      * </summary>
      **/
     @Test
-    public void constructorShouldCreateNewInstanceWithValidArguments()
-    {
+    public void constructorShouldCreateNewInstanceWithValidArguments() {
         var title = "Клавиатура Novation Launchkey 88";
 
         var description = "MIDI-контроллер с полувзвешенной механикой.";
@@ -50,8 +49,7 @@ public class ItemModelTest {
      * </summary>
      **/
     @Test
-    public void defaultConstructorShouldCreateInstanceWithDefaultState()
-    {
+    public void defaultConstructorShouldCreateInstanceWithDefaultState() {
         var item = new ItemModel();
 
         Assertions.assertNotNull(item);
@@ -73,8 +71,7 @@ public class ItemModelTest {
      * </summary>
      **/
     @Test
-    public void constructorShouldAllowZeroPrice()
-    {
+    public void constructorShouldAllowZeroPrice() {
         var title = "Подарочный стикер";
 
         var description = "Промо-наклейка к заказу.";
@@ -88,6 +85,78 @@ public class ItemModelTest {
         Assertions.assertNotNull(item);
 
         Assertions.assertEquals(zeroPrice, item.getPrice());
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче пустого или null наименования в конструктор.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNullOrBlankTitleShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel(null, "Описание", "/path.png", 100L);
+        });
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("", "Описание", "/path.png", 100L);
+        });
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("   ", "Описание", "/path.png", 100L);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче пустого или null описания в конструктор.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNullOrBlankDescriptionShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", null, "/path.png", 100L);
+        });
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", "", "/path.png", 100L);
+        });
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", "   ", "/path.png", 100L);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче пустого или null пути к изображению в конструктор.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNullOrBlankImgPathShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", "Описание", null, 100L);
+        });
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", "Описание", "", 100L);
+        });
+
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", "Описание", "   ", 100L);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче отрицательной цены в конструктор.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNegativePriceShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new ItemModel("Товар", "Описание", "/path.png", -1L);
+        });
     }
 
     // endregion

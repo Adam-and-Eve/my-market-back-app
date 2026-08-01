@@ -6,8 +6,6 @@ import org.mockito.Mockito;
 
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
@@ -16,7 +14,7 @@ import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
-import ru.yandex.practicum.mymarket.models.ItemModel;
+import ru.yandex.practicum.mymarket.viewmodels.CatalogCellViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PagingViewModel;
@@ -48,8 +46,7 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
      * </summary>
      **/
     @Test
-    public void getCatalogShouldReturnItemsPageWithGridStructure()
-    {
+    public void getCatalogShouldReturnItemsPageWithGridStructure() {
         var asusLaptop = new ItemViewModel(
                 1L,
                 "Ноутбук ASUS ROG Strix SCAR 18",
@@ -68,7 +65,11 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 0
         );
 
-        var row = List.of(asusLaptop, keychronKeyboard);
+        var cell1 = CatalogCellViewModel.of(asusLaptop);
+
+        var cell2 = CatalogCellViewModel.of(keychronKeyboard);
+
+        var row = List.of(cell1, cell2);
 
         var grid = List.of(row);
 
@@ -103,8 +104,7 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
      * </summary>
      **/
     @Test
-    public void getItemShouldReturnItemDetailsForLogitechMouse()
-    {
+    public void getItemShouldReturnItemDetailsForLogitechMouse() {
         var itemId = 3L;
 
         var logitechMouseViewModel = new ItemViewModel(
@@ -135,8 +135,7 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
      * </summary>
      **/
     @Test
-    public void updateCatalogItemShouldAddIntelProcessorAndRedirectWithSearchContext()
-    {
+    public void updateCatalogItemShouldAddIntelProcessorAndRedirectWithSearchContext() {
         var itemId = 4L;
 
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
@@ -167,26 +166,14 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
     /**
      * <summary>
-     * Проверяет изменение количества товара прямо со страницы карточки клавиатуры Keychron и бесшовный возврат того же View-компонента карточки.
+     * Проверяет изменение количества товара со страницы детальной карточки и последующий редирект обратно на эту карточку.
      * </summary>
      **/
     @Test
-    public void updateItemShouldDecreaseKeychronQuantityAndReturnItemDetails()
-    {
+    public void updateItemShouldDecreaseKeychronQuantityAndRedirectToItemDetails() {
         var itemId = 2L;
 
-        var keychronKeyboardViewModel = new ItemViewModel(
-                itemId,
-                "Клавиатура Keychron Q1 Pro",
-                "Кастомная механическая клавиатура...",
-                "images/keychron_q1.png",
-                22500L,
-                0
-        );
-
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.MINUS)).thenReturn(Mono.empty());
-
-        Mockito.when(itemService.findById(itemId)).thenReturn(Mono.just(keychronKeyboardViewModel));
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
 
@@ -196,17 +183,10 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(htmlBody -> {
-                    assert htmlBody != null;
-
-                    Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
-                });
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/items/" + itemId);
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.MINUS);
-
-        Mockito.verify(itemService, Mockito.times(1)).findById(itemId);
     }
 
     // endregion

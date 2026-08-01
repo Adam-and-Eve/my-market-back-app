@@ -1,6 +1,5 @@
 package ru.yandex.practicum.mymarket.services;
 
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -12,6 +11,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.mappers.CartMapper;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
@@ -24,7 +24,6 @@ import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * <summary>
@@ -61,20 +60,17 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void findCartShouldReturnEmptyCartWhenNoItemsExist()
-    {
+    void findCartShouldReturnEmptyCartWhenNoItemsExist() {
         Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.empty());
 
         Mockito.when(cartMapper.toViewModel(Collections.emptyList()))
                 .thenReturn(new CartPageViewModel(Collections.emptyList(), 0L));
 
-        var cartPage = cartService.findCart().block();
-
-        Assertions.assertNotNull(cartPage);
-
-        Assertions.assertTrue(cartPage.items().isEmpty());
-
-        Assertions.assertEquals(0L, cartPage.total());
+        StepVerifier.create(cartService.findCart())
+                .expectNextMatches(cartPage ->
+                        cartPage.items().isEmpty() && cartPage.total() == 0L
+                )
+                .verifyComplete();
     }
 
     /**
@@ -83,8 +79,7 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void findCartShouldReturnPopulatedCartWhenItemsExist()
-    {
+    void findCartShouldReturnPopulatedCartWhenItemsExist() {
         var itemId = 1L;
 
         var cartItem = new CartItemModel(itemId, 2);
@@ -105,15 +100,11 @@ public class CartServiceImplTest {
 
         Mockito.when(cartMapper.toViewModel(List.of(itemViewModel))).thenReturn(expectedPage);
 
-        var cartPage = cartService.findCart().block();
-
-        Assertions.assertNotNull(cartPage);
-
-        Assertions.assertEquals(1, cartPage.items().size());
-
-        Assertions.assertEquals(90000L, cartPage.total());
-
-        Assertions.assertEquals("Novation Launchkey 88", cartPage.items().getFirst().title());
+        StepVerifier.create(cartService.findCart())
+                .expectNextMatches(cartPage ->
+                        cartPage.items().size() == 1 && cartPage.total() == 90000L && cartPage.items().getFirst().title().equals("Novation Launchkey 88")
+                )
+                .verifyComplete();
     }
 
     /**
@@ -122,8 +113,7 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void updateItemCountShouldCreateNewCartItemWhenActionIsPlusAndItemNotPresent()
-    {
+    void updateItemCountShouldCreateNewCartItemWhenActionIsPlusAndItemNotPresent() {
         var itemId = 1L;
 
         var itemModel = new ItemModel("Товар", "Описание", "/img.png", 100L);
@@ -137,7 +127,8 @@ public class CartServiceImplTest {
         Mockito.when(cartItemRepository.save(Mockito.any(CartItemModel.class)))
                 .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
 
-        cartService.updateItemCount(itemId, CartActionEnumModel.PLUS).block();
+        StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS))
+                .verifyComplete();
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).save(Mockito.any(CartItemModel.class));
     }
@@ -148,20 +139,19 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void updateItemCountShouldThrowNotFoundWhenItemDoesNotExistInCatalog()
-    {
+    void updateItemCountShouldThrowNotFoundWhenItemDoesNotExistInCatalog() {
         var itemId = 999L;
 
         Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.empty());
 
         Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.empty());
 
-        var exception = Assertions.assertThrows(ResponseStatusException.class, () ->
-        {
-            cartService.updateItemCount(itemId, CartActionEnumModel.PLUS).block();
-        });
-
-        Assertions.assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
+        StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS))
+                .expectErrorMatches(throwable ->
+                        throwable instanceof ResponseStatusException &&
+                                ((ResponseStatusException) throwable).getStatusCode().equals(HttpStatus.NOT_FOUND)
+                )
+                .verify();
     }
 
     /**
@@ -170,8 +160,7 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void updateItemCountShouldDeleteCartItemWhenActionIsMinusAndQuantityDropsToZero()
-    {
+    void updateItemCountShouldDeleteCartItemWhenActionIsMinusAndQuantityDropsToZero() {
         var itemId = 1L;
 
         var cartItem = new CartItemModel(itemId, 1);
@@ -180,7 +169,8 @@ public class CartServiceImplTest {
 
         Mockito.when(cartItemRepository.delete(cartItem)).thenReturn(Mono.empty());
 
-        cartService.updateItemCount(itemId, CartActionEnumModel.MINUS).block();
+        StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.MINUS))
+                .verifyComplete();
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).delete(cartItem);
 
@@ -193,8 +183,7 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void updateItemCountShouldDeleteImmediatelyWhenActionIsDelete()
-    {
+    void updateItemCountShouldDeleteImmediatelyWhenActionIsDelete() {
         var itemId = 1L;
 
         var cartItem = new CartItemModel(itemId, 5);
@@ -203,7 +192,8 @@ public class CartServiceImplTest {
 
         Mockito.when(cartItemRepository.delete(cartItem)).thenReturn(Mono.empty());
 
-        cartService.updateItemCount(itemId, CartActionEnumModel.DELETE).block();
+        StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.DELETE))
+                .verifyComplete();
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).delete(cartItem);
     }
@@ -214,8 +204,7 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void findCountsForItemsShouldReturnCorrectMap()
-    {
+    void findCountsForItemsShouldReturnCorrectMap() {
         var itemId1 = 10L;
 
         var itemId2 = 20L;
@@ -228,15 +217,11 @@ public class CartServiceImplTest {
 
         Mockito.when(cartItemRepository.findAllByItemIdIn(itemIds)).thenReturn(Flux.just(cartItem1, cartItem2));
 
-        var resultMaps = cartService.findCountsForItems(itemIds).block();
-
-        Assertions.assertNotNull(resultMaps);
-
-        Assertions.assertEquals(2, resultMaps.size());
-
-        Assertions.assertEquals(2, resultMaps.get(itemId1));
-
-        Assertions.assertEquals(5, resultMaps.get(itemId2));
+        StepVerifier.create(cartService.findCountsForItems(itemIds))
+                .expectNextMatches(resultMaps ->
+                        resultMaps.size() == 2 && resultMaps.get(itemId1) == 2 && resultMaps.get(itemId2) == 5
+                )
+                .verifyComplete();
     }
 
     /**
@@ -245,13 +230,10 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void findCountsForItemsShouldReturnEmptyMapWhenParamIsEmpty()
-    {
-        var result = cartService.findCountsForItems(Collections.emptyList()).block();
-
-        Assertions.assertNotNull(result);
-
-        Assertions.assertTrue(result.isEmpty());
+    void findCountsForItemsShouldReturnEmptyMapWhenParamIsEmpty() {
+        StepVerifier.create(cartService.findCountsForItems(Collections.emptyList()))
+                .expectNextMatches(result -> result != null && result.isEmpty())
+                .verifyComplete();
 
         Mockito.verifyNoInteractions(cartItemRepository);
     }
@@ -262,17 +244,16 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void findCountForItemShouldReturnQuantityWhenItemExists()
-    {
+    void findCountForItemShouldReturnQuantityWhenItemExists() {
         var itemId = 5L;
 
         var cartItem = new CartItemModel(itemId, 4);
 
         Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.just(cartItem));
 
-        var count = cartService.findCountForItem(itemId).block();
-
-        Assertions.assertEquals(4, count);
+        StepVerifier.create(cartService.findCountForItem(itemId))
+                .expectNext(4)
+                .verifyComplete();
     }
 
     /**
@@ -281,15 +262,14 @@ public class CartServiceImplTest {
      * </summary>
      **/
     @Test
-    void findCountForItemShouldReturnZeroWhenItemDoesNotExist()
-    {
+    void findCountForItemShouldReturnZeroWhenItemDoesNotExist() {
         var itemId = 5L;
 
         Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.empty());
 
-        var count = cartService.findCountForItem(itemId).block();
-
-        Assertions.assertEquals(0, count);
+        StepVerifier.create(cartService.findCountForItem(itemId))
+                .expectNext(0)
+                .verifyComplete();
     }
 
     // endregion

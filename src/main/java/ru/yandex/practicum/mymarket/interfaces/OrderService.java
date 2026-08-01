@@ -4,8 +4,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
-import java.util.List;
-
 /**
  * <summary>
  * Контракт сервиса для управления бизнес-логикой создания, обработки и получения заказов пользователей.
@@ -35,18 +33,6 @@ public interface OrderService {
      * </return>
      **/
     public Mono<OrderViewModel> findById(final long id);
-
-    /**
-     * <summary>
-     * Оформляет покупку на основе текущего содержимого корзины покупателя.
-     * Переносит все активные элементы корзины в историческую структуру нового заказа, фиксируя цены,
-     * после чего полностью очищает корзину.
-     * </summary>
-     * <return>
-     * @return Уникальный идентификатор созданного заказа, либо -1, если корзина была пуста.
-     * </return>
-     **/
-    public Mono<Long> buy();
 
     // endregion
 }

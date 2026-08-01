@@ -1,10 +1,10 @@
 package ru.yandex.practicum.mymarket.mappers;
 
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.models.OrderItemModel;
+import ru.yandex.practicum.mymarket.viewmodels.CatalogCellViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.ArrayList;
@@ -41,22 +41,23 @@ public class ItemMapper {
      * @return Двумерный список моделей представления, распределенных по строкам для отображения в сетке.
      * </return>
      **/
-    public List<List<ItemViewModel>> toRows(
+    public List<List<CatalogCellViewModel>> toRows(
             final List<ItemModel> items,
             final Map<Long, Integer> counts) {
 
-        var rows = new ArrayList<List<ItemViewModel>>();
+        var rows = new ArrayList<List<CatalogCellViewModel>>();
 
         for (var i = 0; i < items.size(); i += ITEMS_PER_ROW) {
-            var row = new ArrayList<ItemViewModel>();
+            var row = new ArrayList<CatalogCellViewModel>();
 
             items.subList(i, Math.min(i + ITEMS_PER_ROW, items.size()))
                     .stream()
                     .map(item -> toViewModel(item, counts.getOrDefault(item.getId(), 0)))
+                    .map(CatalogCellViewModel::of)
                     .forEach(row::add);
 
             while (row.size() < ITEMS_PER_ROW) {
-                row.add(ItemViewModel.placeholder());
+                row.add(CatalogCellViewModel.placeholder());
             }
 
             rows.add(row);
@@ -124,7 +125,7 @@ public class ItemMapper {
             final OrderItemModel orderItem) {
 
         return new ItemViewModel(
-                -1L,
+                null,
                 orderItem.getTitle(),
                 "",
                 "",

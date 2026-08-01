@@ -60,6 +60,22 @@ public class ItemModel {
             final String imgPath,
             final long price) {
 
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("Наименование товара не может быть пустым");
+        }
+
+        if (description == null || description.isBlank()) {
+            throw new IllegalArgumentException("Описание товара не может быть пустым");
+        }
+
+        if (imgPath == null || imgPath.isBlank()) {
+            throw new IllegalArgumentException("Изображение товара не может быть пустым");
+        }
+
+        if (price < 0) {
+            throw new IllegalArgumentException("Цена товара не может быть отрицательной");
+        }
+
         this.title = title;
         this.description = description;
         this.imgPath = imgPath;

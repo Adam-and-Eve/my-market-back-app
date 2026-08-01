@@ -131,7 +131,7 @@ public class ItemServiceImpl implements ItemService {
     /**
      * <summary>
      * Выполняет построение страницы каталога товаров на основе переданных фильтров, правил сортировки и пагинации.
-     * Обеспечивает безопасную нормализацию параметров перед отправкой запроса в слой хранения данных.
+     * Запросы на фильтрацию, сортировку и выборку нужного окна данных делегируются на уровень базы данных.
      * </summary>
      * @param search Необработанная поисковая строка для фильтрации по названию или описанию.
      * @param sort Строковое имя стратегии сортировки элементов.
@@ -157,25 +157,41 @@ public class ItemServiceImpl implements ItemService {
 
         var normalizedPageSize = catalogHelper.normalizePageSize(pageSize);
 
-        return itemRepository.findAll()
-                .filter(catalogHelper.matchesSearch(normalizedSearch))
-                .sort(catalogHelper.resolveComparator(itemSort))
-                .collectList()
-                .flatMap(items -> buildCatalogPage(
-                   items,
-                   normalizedSearch,
-                   itemSort,
-                   normalizedPageNumber,
-                   normalizedPageSize
-                ));
+
+        var springSort = catalogHelper.resolveSort(itemSort);
+
+        var pageable = PageRequest.of(normalizedPageNumber - 1, normalizedPageSize, springSort);
+
+        var itemsMono = itemRepository
+                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch, pageable)
+                .collectList();
+
+        var countMono = itemRepository
+                .countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch);
+
+        return Mono.zip(itemsMono, countMono)
+                .flatMap(tuple -> {
+                    var pageItems = tuple.getT1();
+                    var totalCount = tuple.getT2();
+
+                    return buildCatalogPage(
+                            pageItems,
+                            totalCount,
+                            normalizedSearch,
+                            itemSort,
+                            normalizedPageNumber,
+                            normalizedPageSize
+                    );
+                });
     }
 
     /**
      * <summary>
-     * Выполняет постраничную нарезку отсортированного списка товаров, обогащает их данными о количестве
-     * в корзине текущего пользователя и собирает итоговую View-модель страницы каталога.
+     * Обогащает отфильтрованную страницу товаров данными о количестве в корзине текущего пользователя
+     * и собирает итоговую View-модель страницы каталога.
      * </summary>
-     * @param allItems Полный предварительно отфильтрованный и отсортированный список моделей товаров.
+     * @param pageItems Список моделей товаров, полученный из БД для текущей страницы.
+     * @param totalCount Общее количество товаров в БД, удовлетворяющих критериям поиска.
      * @param search Нормализованная поисковая строка, использованная при фильтрации.
      * @param sort Примененная стратегия сортировки элементов каталога.
      * @param pageNumber Номер текущей отображаемой страницы.
@@ -185,21 +201,16 @@ public class ItemServiceImpl implements ItemService {
      * </return>
      **/
     private Mono<CatalogPageViewModel> buildCatalogPage(
-            final List<ItemModel> allItems,
+            final List<ItemModel> pageItems,
+            final long totalCount,
             final String search,
             final ItemSortEnumModel sort,
             final int pageNumber,
             final int pageSize
     ){
-        var fromIndex = Math.min((pageNumber - 1) * pageSize, allItems.size());
-
-        var toIndex = Math.min((fromIndex + pageSize), allItems.size());
-
-        var pageItems = allItems.subList(fromIndex, toIndex);
-
         var hasPrevious = pageNumber > 1;
 
-        var hasNext = toIndex < allItems.size();
+        var hasNext = ((long) pageNumber * pageSize) < totalCount;
 
         var itemIds = pageItems.stream().map(ItemModel::getId).toList();
 

@@ -62,6 +62,22 @@ public class OrderItemModel {
             final long price,
             final int quantity) {
 
+        if (orderId == null) {
+            throw new IllegalArgumentException("Идентификатор заказа не может быть null");
+        }
+
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("Наименование позиции заказа не может быть пустым");
+        }
+
+        if (price < 0) {
+            throw new IllegalArgumentException("Цена позиции заказа не может быть отрицательной");
+        }
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Количество в позиции заказа должно быть строго больше нуля");
+        }
+
         this.orderId = orderId;
         this.title = title;
         this.price = price;

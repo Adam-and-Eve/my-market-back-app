@@ -1,13 +1,11 @@
 package ru.yandex.practicum.mymarket.controllers;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
@@ -138,7 +136,7 @@ public class CatalogController {
             Model model
     ){
         return cartService.updateItemCount(id, action)
-                .then(getItem(id, model));
+                .thenReturn("redirect:/items/" + id);
     }
 
     private void fillModel(final Model model, CatalogPageViewModel viewModel) {

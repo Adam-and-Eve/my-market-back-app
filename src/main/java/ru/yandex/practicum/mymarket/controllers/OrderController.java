@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
+import ru.yandex.practicum.mymarket.interfaces.PurchaseService;
 
 /**
  * <summary>
@@ -24,13 +25,18 @@ public class OrderController {
      **/
     private final OrderService orderService;
 
+    private final PurchaseService purchaseService;
+
     // endregion
 
     // region Constructors
 
-    public OrderController(final OrderService orderService) {
+    public OrderController(
+            final OrderService orderService,
+            final PurchaseService purchaseService) {
 
         this.orderService = orderService;
+        this.purchaseService = purchaseService;
     }
 
     // endregion
@@ -91,14 +97,9 @@ public class OrderController {
      **/
     @PostMapping("/buy")
     public Mono<String> buy() {
-        return orderService.buy()
-                .map(orderId -> {
-                    if (orderId == -1) {
-                        return "redirect:/cart/items";
-                    }
-
-                    return "redirect:/orders/" + orderId + "?newOrder=true";
-                });
+        return purchaseService.buy()
+                .map(orderId -> "redirect:/orders/" + orderId + "?newOrder=true")
+                .defaultIfEmpty("redirect:/cart/items");
     }
 
     // endregion
