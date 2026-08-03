@@ -16,8 +16,10 @@
 	<description>My Market Application</description>
 	<modules>
 		<module>my-market-app</module>
-	</modules>
+        <module>payment-service</module>
+    </modules>
 	<properties>
 		<java.version>21</java.version>
+		<openapi.generator.version>7.22.0</openapi.generator.version>
 	</properties>
 </project>
