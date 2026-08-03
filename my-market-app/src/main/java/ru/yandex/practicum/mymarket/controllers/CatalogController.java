@@ -2,15 +2,13 @@ package ru.yandex.practicum.mymarket.controllers;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
+import ru.yandex.practicum.mymarket.viewmodels.CartItemFormViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 
 /**
@@ -96,27 +94,21 @@ public class CatalogController {
      * Обрабатывает POST-запросы с витрины товаров для изменения количества выбранной позиции в корзине.
      * После изменения состояния выполняет редирект обратно на каталог с сохранением всех фильтров и пагинации.
      * </summary>
-     * @param id Идентификатор изменяемого товара.
-     * @param search Текущее состояние строки поиска (для сохранения контекста при редиректе).
-     * @param sort Текущее состояние сортировки (для сохранения контекста при редиректе).
-     * @param pageNumber Текущий номер страницы (для сохранения контекста при редиректе).
-     * @param pageSize Текущий размер страницы (для сохранения контекста при редиректе).
-     * @param action Действие над товаром.
+     * @param form Данные с HTML-формы.
      * <return>
      * @return Строка перенаправления (redirect) на эндпоинт каталога с query-параметрами.
      * </return>
      **/
     @PostMapping("/items")
     public Mono<String> updateCatalogItem(
-            @RequestParam final long id,
-            @RequestParam(required = false) final String search,
-            @RequestParam(required = false) final String sort,
-            @RequestParam(required = false) final Integer pageNumber,
-            @RequestParam(required = false) final Integer pageSize,
-            @RequestParam CartActionEnumModel action
-    ){
-        return cartService.updateItemCount(id, action)
-                .thenReturn(redirectToCatalog(search, sort, pageNumber, pageSize));
+            @ModelAttribute CartItemFormViewModel form
+            ){
+        return cartService.updateItemCount(form.getId(), form.getAction())
+                .thenReturn(redirectToCatalog(
+                        form.getSearch(),
+                        form.getSort(),
+                        form.getPageNumber(),
+                        form.getPageSize()));
     }
 
     /**
@@ -124,7 +116,7 @@ public class CatalogController {
      * Обрабатывает POST-запросы со страницы отдельного товара для изменения его количества в корзине.
      * </summary>
      * @param id Идентификатор товара, переданный в пути запроса.
-     * @param action Действие над товаром.
+     * @param form Данные с HTML-формы.
      * <return>
      * @return Строка перенаправления (redirect) на GET-эндпоинт карточки текущего товара.
      * </return>
@@ -132,10 +124,10 @@ public class CatalogController {
     @PostMapping("/items/{id}")
     public Mono<String> updateItem(
             @PathVariable final long id,
-            @RequestParam CartActionEnumModel action,
+            @ModelAttribute CartItemFormViewModel form,
             Model model
     ){
-        return cartService.updateItemCount(id, action)
+        return cartService.updateItemCount(id, form.getAction())
                 .thenReturn("redirect:/items/" + id);
     }
 

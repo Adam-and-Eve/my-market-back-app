@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.viewmodels.CheckoutResultViewModel;
 
 public interface PurchaseService {
 
@@ -15,7 +16,7 @@ public interface PurchaseService {
      * @return Уникальный идентификатор созданного заказа, либо Mono.empty(), если корзина покупателя оказалась пуста.
      * </return>
      **/
-    public Mono<Long> buy();
+    public Mono<CheckoutResultViewModel> buy();
 
     // endregion
 }

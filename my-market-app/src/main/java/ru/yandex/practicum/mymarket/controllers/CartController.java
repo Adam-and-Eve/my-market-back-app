@@ -3,11 +3,13 @@ package ru.yandex.practicum.mymarket.controllers;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
+import ru.yandex.practicum.mymarket.viewmodels.CartItemFormViewModel;
 
 /**
  * <summary>
@@ -51,6 +53,10 @@ public class CartController {
         return cartService.findCart().doOnNext(cartPage -> {
             model.addAttribute("items", cartPage.items());
             model.addAttribute("total", cartPage.total());
+            model.addAttribute("paymentAvailable", cartPage.paymentAvailable());
+            model.addAttribute("balance", cartPage.balance());
+            model.addAttribute("purchaseAvailable", cartPage.purchaseAvailable());
+            model.addAttribute("paymentMessage", cartPage.paymentMessage());
         }).thenReturn("cart");
     }
 
@@ -58,19 +64,18 @@ public class CartController {
      * <summary>
      * Обрабатывает POST-запросы со страницы корзины для изменения количества выбранного товара.
      * </summary>
-     * @param id Уникальный идентификатор изменяемого товара.
-     * @param action Тип действия над позицией (PLUS, MINUS, DELETE).
+     * @param form Данные с формы HTML-шаблона.
+     * @param model Контекст модели Spring MVC для передачи данных в HTML-шаблон.
      * <return>
      * @return Строка перенаправления (redirect) на GET-метод отображения корзины.
      * </return>
      **/
     @PostMapping("/cart/items")
     public Mono<String> updateCartItem(
-            @RequestParam final long id,
-            @RequestParam final CartActionEnumModel action,
+            @ModelAttribute CartItemFormViewModel form,
             Model model){
 
-        return cartService.updateItemCount(id, action)
+        return cartService.updateItemCount(form.getId(), form.getAction())
                 .thenReturn("redirect:/cart/items");
     }
 

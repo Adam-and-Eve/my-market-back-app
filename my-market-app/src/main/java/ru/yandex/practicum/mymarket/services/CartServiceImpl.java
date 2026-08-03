@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
+import ru.yandex.practicum.mymarket.interfaces.PaymentClientService;
 import ru.yandex.practicum.mymarket.mappers.CartMapper;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
@@ -14,6 +15,7 @@ import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.List;
 import java.util.Map;
@@ -37,8 +39,12 @@ public class CartServiceImpl implements CartService {
      * Репозиторий для проверки существования и получения данных товаров из каталога.
      **/
     private final ItemRepository itemRepository;
+
     private final ItemMapper itemMapper;
+
     private final CartMapper cartMapper;
+
+    private final PaymentClientService paymentClientService;
 
     // endregion
 
@@ -48,12 +54,14 @@ public class CartServiceImpl implements CartService {
             final CartItemRepository cartItemRepository,
             final ItemRepository itemRepository,
             final ItemMapper itemMapper,
-            final CartMapper cartMapper) {
+            final CartMapper cartMapper,
+            final PaymentClientService paymentClientService) {
 
         this.cartItemRepository = cartItemRepository;
         this.itemRepository = itemRepository;
         this.itemMapper = itemMapper;
         this.cartMapper = cartMapper;
+        this.paymentClientService = paymentClientService;
     }
 
     // endregion
@@ -72,10 +80,14 @@ public class CartServiceImpl implements CartService {
     @Override
     public Mono<CartPageViewModel> findCart() {
         return cartItemRepository.findAllByOrderByItemIdAsc()
-                .flatMap(cartItem -> findModelById(cartItem.getItemId())
+                .flatMapSequential(cartItem -> itemRepository.findById(cartItem.getItemId())
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found")))
                         .map(item -> itemMapper.toViewModel(cartItem, item)))
                 .collectList()
-                .map(cartMapper::toViewModel);
+                .flatMap(items -> items.isEmpty()
+                        ? Mono.just(cartMapper.toViewModel(items))
+                        : paymentClientService.getBalance().map(payment -> cartMapper.toViewModel(items, payment))
+                );
     }
 
     /**
@@ -145,10 +157,11 @@ public class CartServiceImpl implements CartService {
      **/
     private Mono<Void> addItem(final long itemId) {
         return cartItemRepository.findByItemId(itemId)
-                .switchIfEmpty(findModelById(itemId).map(item -> new CartItemModel(item.getId(), 0)))
+                .switchIfEmpty(itemRepository.findById(itemId)
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found")))
+                        .map(item -> new CartItemModel(item.getId(), 0)))
                 .flatMap(cartItem -> {
                     cartItem.increase();
-
                     return cartItemRepository.save(cartItem).then();
                 });
     }

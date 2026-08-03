@@ -98,7 +98,7 @@ public class OrderController {
     @PostMapping("/buy")
     public Mono<String> buy() {
         return purchaseService.buy()
-                .map(orderId -> "redirect:/orders/" + orderId + "?newOrder=true")
+                .map(order -> "redirect:/orders/" + order.orderId() + "?newOrder=true")
                 .defaultIfEmpty("redirect:/cart/items");
     }
 

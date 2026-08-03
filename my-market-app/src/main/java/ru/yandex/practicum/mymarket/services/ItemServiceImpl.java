@@ -9,6 +9,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
+import ru.yandex.practicum.mymarket.interfaces.ItemCacheService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
@@ -50,6 +51,8 @@ public class ItemServiceImpl implements ItemService {
      **/
     private final CatalogHelper catalogHelper;
 
+    private final ItemCacheService itemCacheService;
+
     // endregion
 
     // region Constructors
@@ -58,12 +61,14 @@ public class ItemServiceImpl implements ItemService {
             final ItemRepository itemRepository,
             final CartService cartService,
             final ItemMapper itemMapper,
-            final CatalogHelper catalogHelper) {
+            final CatalogHelper catalogHelper,
+            final ItemCacheService itemCacheService) {
 
         this.itemRepository = itemRepository;
         this.cartService = cartService;
         this.itemMapper = itemMapper;
         this.catalogHelper = catalogHelper;
+        this.itemCacheService = itemCacheService;
     }
 
     // endregion
@@ -81,7 +86,7 @@ public class ItemServiceImpl implements ItemService {
     @Transactional(readOnly = true)
     @Override
     public Flux<ItemModel> findAll() {
-        return itemRepository.findAll();
+        return itemCacheService.findAll(itemRepository.findAll());
     }
 
     /**
@@ -97,7 +102,7 @@ public class ItemServiceImpl implements ItemService {
     @Transactional(readOnly = true)
     @Override
     public Mono<ItemViewModel> findById(final long id) {
-        return itemRepository.findById(id)
+        return itemCacheService.findById(id, itemRepository.findById(id))
                 .flatMap(item -> cartService.findCountForItem(item.getId())
                         .map(count -> itemMapper.toViewModel(item, count)))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
@@ -118,7 +123,7 @@ public class ItemServiceImpl implements ItemService {
     @Transactional(readOnly = true)
     @Override
     public Mono<ItemModel> findModelById(final long id) {
-        return itemRepository.findById(id)
+        return itemCacheService.findById(id, itemRepository.findById(id))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
     }
 
