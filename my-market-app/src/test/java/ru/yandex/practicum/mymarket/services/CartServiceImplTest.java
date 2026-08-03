@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import ru.yandex.practicum.mymarket.interfaces.PaymentClientService;
 import ru.yandex.practicum.mymarket.mappers.CartMapper;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
@@ -21,6 +22,7 @@ import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.PaymentAvailabilityViewModel;
 
 import java.util.Collections;
 import java.util.List;
@@ -47,16 +49,20 @@ public class CartServiceImplTest {
     @Mock
     private CartMapper cartMapper;
 
+    @Mock
+    private PaymentClientService paymentClientService;
+
     @InjectMocks
     private CartServiceImpl cartService;
 
     // endregion
 
-    // region Tests
+    // region Tests for findCart
 
     /**
      * <summary>
      * Проверяет сборку пустой корзины, когда в реактивном репозитории нет записей.
+     * При этом запрос баланса к платежному сервису выполняться не должен.
      * </summary>
      **/
     @Test
@@ -71,11 +77,14 @@ public class CartServiceImplTest {
                         cartPage.items().isEmpty() && cartPage.total() == 0L
                 )
                 .verifyComplete();
+
+        Mockito.verifyNoInteractions(paymentClientService);
     }
 
     /**
      * <summary>
-     * Проверяет сборку и маппинг наполненной корзины с получением данных из ItemRepository и правильной сигнатурой ItemMapper.
+     * Проверяет сборку наполненной корзины с получением данных из ItemRepository,
+     * а также вызов PaymentClientService для проверки доступности оплаты.
      * </summary>
      **/
     @Test
@@ -92,24 +101,36 @@ public class CartServiceImplTest {
 
         var expectedPage = new CartPageViewModel(List.of(itemViewModel), 90000L);
 
+        var paymentAvailability = Mockito.mock(PaymentAvailabilityViewModel.class);
+
         Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.just(cartItem));
 
         Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(itemModel));
 
         Mockito.when(itemMapper.toViewModel(cartItem, itemModel)).thenReturn(itemViewModel);
 
-        Mockito.when(cartMapper.toViewModel(List.of(itemViewModel))).thenReturn(expectedPage);
+        Mockito.when(paymentClientService.getBalance()).thenReturn(Mono.just(paymentAvailability));
+
+        Mockito.when(cartMapper.toViewModel(List.of(itemViewModel), paymentAvailability)).thenReturn(expectedPage);
 
         StepVerifier.create(cartService.findCart())
                 .expectNextMatches(cartPage ->
-                        cartPage.items().size() == 1 && cartPage.total() == 90000L && cartPage.items().getFirst().title().equals("Novation Launchkey 88")
+                        cartPage.items().size() == 1 &&
+                                cartPage.total() == 90000L &&
+                                cartPage.items().getFirst().title().equals("Novation Launchkey 88")
                 )
                 .verifyComplete();
+
+        Mockito.verify(paymentClientService, Mockito.times(1)).getBalance();
     }
+
+    // endregion
+
+    // region Tests for updateItemCount (PLUS)
 
     /**
      * <summary>
-     * Проверяет корректное добавление нового товара в корзину (когда его там еще не было) со стартовым количеством.
+     * Проверяет добавление нового товара в корзину (когда его там еще не было) со стартовым количеством 1.
      * </summary>
      **/
     @Test
@@ -130,7 +151,41 @@ public class CartServiceImplTest {
         StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS))
                 .verifyComplete();
 
-        Mockito.verify(cartItemRepository, Mockito.times(1)).save(Mockito.any(CartItemModel.class));
+        Mockito.verify(cartItemRepository, Mockito.times(1)).save(Mockito.argThat(savedItem ->
+                savedItem.getItemId().equals(itemId) && savedItem.getQuantity() == 1
+        ));
+    }
+
+    /**
+     * <summary>
+     * Проверяет увеличение количества товара, который уже присутствует в корзине.
+     * </summary>
+     **/
+    @Test
+    void updateItemCountShouldIncreaseQuantityWhenActionIsPlusAndItemAlreadyPresent() {
+        var itemId = 1L;
+
+        var mockItem = new ItemModel("Клавиатура Keychron", "Описание", "images/keychron.png", 22500L);
+
+        ReflectionTestUtils.setField(mockItem, "id", itemId);
+
+        var existingCartItem = new CartItemModel(itemId, 2);
+
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.just(existingCartItem));
+
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(mockItem));
+
+        Mockito.when(cartItemRepository.save(Mockito.any(CartItemModel.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS))
+                .verifyComplete();
+
+        Mockito.verify(itemRepository, Mockito.times(1)).findById(itemId);
+
+        Mockito.verify(cartItemRepository, Mockito.times(1)).save(Mockito.argThat(savedItem ->
+                savedItem.getItemId().equals(itemId) && savedItem.getQuantity() == 3
+        ));
     }
 
     /**
@@ -154,9 +209,38 @@ public class CartServiceImplTest {
                 .verify();
     }
 
+    // endregion
+
+    // region Tests for updateItemCount (MINUS & DELETE)
+
     /**
      * <summary>
-     * Проверяет уменьшение количества товара в корзине и его полное удаление, если количество достигло нуля.
+     * Проверяет уменьшение количества товара в корзине на 1, если итоговое количество остается больше 0.
+     * </summary>
+     **/
+    @Test
+    void updateItemCountShouldDecreaseQuantityWhenActionIsMinusAndQuantityStaysGreaterThanZero() {
+        var itemId = 1L;
+
+        var cartItem = new CartItemModel(itemId, 3);
+
+        Mockito.when(cartItemRepository.findByItemId(itemId)).thenReturn(Mono.just(cartItem));
+
+        Mockito.when(cartItemRepository.save(Mockito.any(CartItemModel.class)))
+                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+
+        StepVerifier.create(cartService.updateItemCount(itemId, CartActionEnumModel.MINUS))
+                .verifyComplete();
+
+        Mockito.verify(cartItemRepository, Mockito.times(1)).save(Mockito.argThat(savedItem ->
+                savedItem.getQuantity() == 2
+        ));
+        Mockito.verify(cartItemRepository, Mockito.never()).delete(Mockito.any());
+    }
+
+    /**
+     * <summary>
+     * Проверяет полное удаление товара из корзины, если после уменьшения его количество достигло нуля.
      * </summary>
      **/
     @Test
@@ -198,6 +282,10 @@ public class CartServiceImplTest {
         Mockito.verify(cartItemRepository, Mockito.times(1)).delete(cartItem);
     }
 
+    // endregion
+
+    // region Tests for findCountsForItems & findCountForItem
+
     /**
      * <summary>
      * Проверяет пакетное получение мапы количеств товаров из реактивного потока.
@@ -218,15 +306,15 @@ public class CartServiceImplTest {
         Mockito.when(cartItemRepository.findAllByItemIdIn(itemIds)).thenReturn(Flux.just(cartItem1, cartItem2));
 
         StepVerifier.create(cartService.findCountsForItems(itemIds))
-                .expectNextMatches(resultMaps ->
-                        resultMaps.size() == 2 && resultMaps.get(itemId1) == 2 && resultMaps.get(itemId2) == 5
+                .expectNextMatches(resultMap ->
+                        resultMap.size() == 2 && resultMap.get(itemId1) == 2 && resultMap.get(itemId2) == 5
                 )
                 .verifyComplete();
     }
 
     /**
      * <summary>
-     * Проверяет, что findCountsForItems возвращает пустую мапу, если передан пустой список ID, без обращений к репозиторию.
+     * Проверяет, что findCountsForItems возвращает пустую мапу при переданном пустом списке ID без обращения к БД.
      * </summary>
      **/
     @Test

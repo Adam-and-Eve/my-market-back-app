@@ -1,6 +1,12 @@
+package ru.yandex.practicum.payment;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
 /**
  * <summary>
@@ -12,6 +18,24 @@ import org.springframework.test.context.ActiveProfiles;
 @SpringBootTest
 @ActiveProfiles("test")
 public class PaymentServiceApplicationTests {
+
+    // region Fields
+
+    @Autowired
+    protected ApplicationContext applicationContext;
+
+    protected WebTestClient webTestClient;
+
+    // endregion
+
+    // region Setup
+
+    @BeforeEach
+    void clearDatabase() {
+        this.webTestClient = WebTestClient.bindToApplicationContext(applicationContext).build();
+    }
+
+    // endregion
 
     // region Tests
 

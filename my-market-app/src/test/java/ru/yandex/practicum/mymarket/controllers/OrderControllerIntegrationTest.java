@@ -9,6 +9,7 @@ import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
 import ru.yandex.practicum.mymarket.interfaces.PurchaseService;
+import ru.yandex.practicum.mymarket.viewmodels.CheckoutResultViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
@@ -58,12 +59,12 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(htmlBody -> {
-                    assert htmlBody != null;
-
+                    Assertions.assertNotNull(htmlBody);
                     Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
-
                     Assertions.assertTrue(htmlBody.contains("101"));
                 });
+
+        Mockito.verify(orderService, Mockito.times(1)).findAll();
     }
 
     /**
@@ -93,10 +94,11 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(htmlBody -> {
-                    assert htmlBody != null;
-
+                    Assertions.assertNotNull(htmlBody);
                     Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
                 });
+
+        Mockito.verify(orderService, Mockito.times(1)).findById(orderId);
     }
 
     /**
@@ -119,6 +121,8 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(Assertions::assertNotNull);
+
+        Mockito.verify(orderService, Mockito.times(1)).findById(orderId);
     }
 
     /**
@@ -130,7 +134,7 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
     public void buyShouldCreateOrderAndRedirectToReceiptPageWhenCartIsNotEmpty() {
         var expectedOrderId = 42L;
 
-        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(expectedOrderId));
+        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(CheckoutResultViewModel.paid(expectedOrderId)));
 
         webTestClient.post().uri("/buy")
                 .exchange()

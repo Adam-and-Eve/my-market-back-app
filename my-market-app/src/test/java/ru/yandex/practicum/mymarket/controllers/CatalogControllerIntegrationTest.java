@@ -90,12 +90,12 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(htmlBody -> {
-                    assert htmlBody != null;
-
+                    Assertions.assertNotNull(htmlBody);
                     Assertions.assertTrue(htmlBody.contains("Ноутбук ASUS ROG Strix SCAR 18"));
-
                     Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
                 });
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog("Gaming", "price_desc", 0, 2);
     }
 
     /**
@@ -123,10 +123,11 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(htmlBody -> {
-                    assert htmlBody != null;
-
+                    Assertions.assertNotNull(htmlBody);
                     Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
                 });
+
+        Mockito.verify(itemService, Mockito.times(1)).findById(itemId);
     }
 
     /**

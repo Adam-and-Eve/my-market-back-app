@@ -16,6 +16,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
+import ru.yandex.practicum.mymarket.interfaces.ItemCacheService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
@@ -47,6 +48,9 @@ public class ItemServiceImplTest {
     @Mock
     private CatalogHelper catalogHelper;
 
+    @Mock
+    private ItemCacheService itemCacheService;
+
     @InjectMocks
     private ItemServiceImpl itemService;
 
@@ -56,7 +60,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет, что метод возвращает полный список доменных моделей товаров, собранных из реактивного потока Flux.
+     * Проверяет, что метод возвращает полный список доменных моделей товаров через взаимодействие с ItemCacheService.
      * </summary>
      **/
     @Test
@@ -67,13 +71,20 @@ public class ItemServiceImplTest {
 
         Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item1, item2));
 
+        Mockito.when(itemCacheService.findAll(Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
         StepVerifier.create(itemService.findAll().collectList())
                 .expectNextMatches(actualItems ->
-                        actualItems.size() == 2 && actualItems.getFirst().getTitle().equals("Novation Launchkey") && actualItems.get(1).getTitle().equals("Xiaomi Mi Mix 4")
+                        actualItems.size() == 2 &&
+                                actualItems.getFirst().getTitle().equals("Novation Launchkey") &&
+                                actualItems.get(1).getTitle().equals("Xiaomi Mi Mix 4")
                 )
                 .verifyComplete();
 
         Mockito.verify(itemRepository, Mockito.times(1)).findAll();
+
+        Mockito.verify(itemCacheService, Mockito.times(1)).findAll(Mockito.any());
     }
 
     // endregion
@@ -82,7 +93,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет успешное получение и маппинг обогащенной View-модели товара из реактивных источников при его наличии в БД.
+     * Проверяет успешное получение и маппинг обогащенной View-модели товара из кэша/БД при его наличии.
      * </summary>
      **/
     @Test
@@ -99,6 +110,9 @@ public class ItemServiceImplTest {
 
         Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(itemModel));
 
+        Mockito.when(itemCacheService.findById(Mockito.eq(itemId), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
+
         Mockito.when(cartService.findCountForItem(itemId)).thenReturn(Mono.just(cartCount));
 
         Mockito.when(itemMapper.toViewModel(itemModel, cartCount)).thenReturn(expectedViewModel);
@@ -108,6 +122,8 @@ public class ItemServiceImplTest {
                         actualViewModel.title().equals(expectedViewModel.title()) && actualViewModel.count() == cartCount
                 )
                 .verifyComplete();
+
+        Mockito.verify(itemCacheService, Mockito.times(1)).findById(Mockito.eq(itemId), Mockito.any());
     }
 
     /**
@@ -120,6 +136,9 @@ public class ItemServiceImplTest {
         long nonExistingId = 999L;
 
         Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Mono.empty());
+
+        Mockito.when(itemCacheService.findById(Mockito.eq(nonExistingId), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
 
         StepVerifier.create(itemService.findById(nonExistingId))
                 .expectErrorMatches(throwable ->
@@ -140,7 +159,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет извлечение чистой доменной модели по идентификатору товара через Mono.
+     * Проверяет извлечение чистой доменной модели по идентификатору товара через Mono и ItemCacheService.
      * </summary>
      **/
     @Test
@@ -150,6 +169,9 @@ public class ItemServiceImplTest {
         var expectedModel = new ItemModel("Xiaomi Mi Mix 4", "Flagship Phone", "/img2.png", 60000L);
 
         Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(expectedModel));
+
+        Mockito.when(itemCacheService.findById(Mockito.eq(itemId), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
 
         StepVerifier.create(itemService.findModelById(itemId))
                 .expectNext(expectedModel)
@@ -166,6 +188,9 @@ public class ItemServiceImplTest {
         long nonExistingId = 999L;
 
         Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Mono.empty());
+
+        Mockito.when(itemCacheService.findById(Mockito.eq(nonExistingId), Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(1));
 
         StepVerifier.create(itemService.findModelById(nonExistingId))
                 .expectErrorMatches(throwable ->

@@ -98,6 +98,7 @@ public class PurchaseServiceImpl implements PurchaseService {
         if (!payment.success()) {
             return Mono.just(CheckoutResultViewModel.rejected(payment.message()));
         }
+
         return saveOrder(cartItems).map(CheckoutResultViewModel::paid);
     }
 
@@ -113,6 +114,9 @@ public class PurchaseServiceImpl implements PurchaseService {
     private Mono<Long> calculateTotal(List<CartItemModel> cartItems) {
         return Flux.fromIterable(cartItems)
                 .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
+                        .switchIfEmpty(Mono.error(
+                                new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in catalog")
+                        ))
                         .map(item -> item.getPrice() * cartItem.getQuantity()))
                 .reduce(0L, Long::sum);
     }
@@ -159,7 +163,7 @@ public class PurchaseServiceImpl implements PurchaseService {
                 .flatMap(savedOrder -> createOrderItems(savedOrder.getId(), cartItems)
                         .collectList()
                         .flatMapMany(orderItemRepository::saveAll)
-                        .then(cartItemRepository.deleteAll(cartItems))
+                        .then(Mono.defer(() -> cartItemRepository.deleteAll(cartItems)))
                         .thenReturn(savedOrder.getId()));
     }
 

@@ -42,8 +42,7 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
      * </summary>
      **/
     @Test
-    public void getCartShouldReturnCartPageWithItemsAndTotal()
-    {
+    public void getCartShouldReturnCartPageWithItemsAndTotal() {
         var keychronKeyboard = new ItemViewModel(
                 2L,
                 "Клавиатура Keychron Q1 Pro",
@@ -66,7 +65,14 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
 
         var totalSum = 22500L + (16800L * 2);
 
-        var mockCartPage = new CartPageViewModel(cartItems, totalSum);
+        var mockCartPage = new CartPageViewModel(
+                cartItems,
+                totalSum,
+                true,
+                100000L,
+                true,
+                null
+        );
 
         Mockito.when(cartService.findCart()).thenReturn(Mono.just(mockCartPage));
 
@@ -78,6 +84,8 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
                     Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
                     Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
                 });
+
+        Mockito.verify(cartService, Mockito.times(1)).findCart();
     }
 
     /**
@@ -87,8 +95,7 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
      * </summary>
      **/
     @Test
-    public void updateCartItemShouldIncreaseQuantityAndRedirectToCart()
-    {
+    public void updateCartItemShouldIncreaseQuantityAndRedirectToCart() {
         var itemId = 2L;
 
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
@@ -115,8 +122,7 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
      * </summary>
      **/
     @Test
-    public void updateCartItemShouldRemoveItemWhenActionIsDelete()
-    {
+    public void updateCartItemShouldRemoveItemWhenActionIsDelete() {
         var itemId = 3L;
 
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.DELETE)).thenReturn(Mono.empty());

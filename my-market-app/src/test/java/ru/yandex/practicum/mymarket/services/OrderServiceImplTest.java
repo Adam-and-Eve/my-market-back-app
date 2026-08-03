@@ -39,9 +39,6 @@ public class OrderServiceImplTest {
     private OrderItemRepository orderItemRepository;
 
     @Mock
-    private CartItemRepository cartItemRepository;
-
-    @Mock
     private OrderMapper orderMapper;
 
     @InjectMocks
@@ -94,7 +91,7 @@ public class OrderServiceImplTest {
                 .expectNextMatches(List::isEmpty)
                 .verifyComplete();
 
-        Mockito.verifyNoInteractions(orderMapper);
+        Mockito.verifyNoInteractions(orderMapper, orderItemRepository);
     }
 
     // endregion
@@ -151,6 +148,8 @@ public class OrderServiceImplTest {
                         }
                 )
                 .verify();
+
+        Mockito.verifyNoInteractions(orderItemRepository, orderMapper);
     }
 
     // endregion
