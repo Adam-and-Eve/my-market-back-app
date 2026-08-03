@@ -7,18 +7,11 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
-import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.mappers.OrderMapper;
-import ru.yandex.practicum.mymarket.models.CartItemModel;
-import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.models.OrderModel;
-import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
-import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
-
-import java.util.List;
 
 /**
  * <summary>

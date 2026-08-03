@@ -10,8 +10,6 @@ import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
-import ru.yandex.practicum.mymarket.models.CartItemModel;
-import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
 import ru.yandex.practicum.mymarket.models.ItemModel;
@@ -20,11 +18,7 @@ import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PagingViewModel;
 
-import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /**
  * <summary>
