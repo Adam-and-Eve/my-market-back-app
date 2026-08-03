@@ -1,16 +1,20 @@
 package ru.yandex.practicum.mymarket.controllers;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
-import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.reactive.function.BodyInserters;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.interfaces.ItemService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
-import ru.yandex.practicum.mymarket.models.ItemModel;
+import ru.yandex.practicum.mymarket.viewmodels.CatalogCellViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PagingViewModel;
@@ -38,12 +42,11 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
     /**
      * <summary>
-     * Проверяет отображение страницы каталога с сеточной структурой расположения View-моделей товаров.
+     * Проверяет отображение страницы каталога с сеточной структурой расположения товаров.
      * </summary>
      **/
     @Test
-    public void getCatalogShouldReturnItemsPageWithGridStructure() throws Exception
-    {
+    public void getCatalogShouldReturnItemsPageWithGridStructure() {
         var asusLaptop = new ItemViewModel(
                 1L,
                 "Ноутбук ASUS ROG Strix SCAR 18",
@@ -62,7 +65,11 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 0
         );
 
-        var row = List.of(asusLaptop, keychronKeyboard);
+        var cell1 = CatalogCellViewModel.of(asusLaptop);
+
+        var cell2 = CatalogCellViewModel.of(keychronKeyboard);
+
+        var row = List.of(cell1, cell2);
 
         var grid = List.of(row);
 
@@ -71,18 +78,24 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
         var catalogPageViewModel = new CatalogPageViewModel(grid, "Gaming", "price_desc", paging);
 
         Mockito.when(itemService.findCatalog("Gaming", "price_desc", 0, 2))
-                .thenReturn(catalogPageViewModel);
+                .thenReturn(Mono.just(catalogPageViewModel));
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/items")
-                        .param("search", "Gaming")
-                        .param("sort", "price_desc")
-                        .param("pageNumber", "0")
-                        .param("pageSize", "2"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("items"))
-                .andExpect(MockMvcResultMatchers.model().attributeExists("items", "search", "sort", "paging"))
-                .andExpect(MockMvcResultMatchers.model().attribute("items", grid))
-                .andExpect(MockMvcResultMatchers.model().attribute("paging", paging));
+        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("search", "Gaming")
+                        .queryParam("sort", "price_desc")
+                        .queryParam("pageNumber", "0")
+                        .queryParam("pageSize", "2")
+                        .build())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(htmlBody -> {
+                    assert htmlBody != null;
+
+                    Assertions.assertTrue(htmlBody.contains("Ноутбук ASUS ROG Strix SCAR 18"));
+
+                    Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
+                });
     }
 
     /**
@@ -91,9 +104,9 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
      * </summary>
      **/
     @Test
-    public void getItemShouldReturnItemDetailsForLogitechMouse() throws Exception
-    {
+    public void getItemShouldReturnItemDetailsForLogitechMouse() {
         var itemId = 3L;
+
         var logitechMouseViewModel = new ItemViewModel(
                 itemId,
                 "Мышь Logitech G Pro X Superlight 2",
@@ -103,52 +116,75 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 0
         );
 
-        Mockito.when(itemService.findById(itemId)).thenReturn(logitechMouseViewModel);
+        Mockito.when(itemService.findById(itemId)).thenReturn(Mono.just(logitechMouseViewModel));
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/items/{id}", itemId))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("item"))
-                .andExpect(MockMvcResultMatchers.model().attributeExists("item"))
-                .andExpect(MockMvcResultMatchers.model().attribute("item", logitechMouseViewModel));
+        webTestClient.get().uri("/items/{id}", itemId)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(htmlBody -> {
+                    assert htmlBody != null;
+
+                    Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
+                });
     }
 
     /**
      * <summary>
-     * Проверяет добавление процессора Intel в корзину с последующим сохранением контекста поиска Arrow Lake.
+     * Проверяет добавление процессора Intel в корзину с последующим сохранением контекста поиска Arrow Lake и редиректом.
      * </summary>
      **/
     @Test
-    public void updateCatalogItemShouldAddIntelProcessorAndRedirectWithSearchContext() throws Exception
-    {
+    public void updateCatalogItemShouldAddIntelProcessorAndRedirectWithSearchContext() {
         var itemId = 4L;
 
-        mockMvc.perform(MockMvcRequestBuilders.post("/items")
-                        .param("id", String.valueOf(itemId))
-                        .param("action", "PLUS")
-                        .param("search", "Arrow Lake")
-                        .param("sort", "price_asc")
-                        .param("pageNumber", "0")
-                        .param("pageSize", "10"))
-                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
-                .andExpect(MockMvcResultMatchers.redirectedUrl("/items?search=Arrow%20Lake&sort=price_asc&pageNumber=0&pageSize=10"));
+        Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", String.valueOf(itemId));
+
+        formData.add("action", "PLUS");
+
+        formData.add("search", "Arrow Lake");
+
+        formData.add("sort", "price_asc");
+
+        formData.add("pageNumber", "0");
+
+        formData.add("pageSize", "10");
+
+        webTestClient.post().uri("/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/items?search=Arrow%20Lake&sort=price_asc&pageNumber=0&pageSize=10");
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.PLUS);
     }
 
     /**
      * <summary>
-     * Проверяет изменение количества товара прямо со страницы карточки клавиатуры Keychron.
+     * Проверяет изменение количества товара со страницы детальной карточки и последующий редирект обратно на эту карточку.
      * </summary>
      **/
     @Test
-    public void updateItemShouldDecreaseKeychainQuantityAndRedirectToItsOwnCard() throws Exception
-    {
+    public void updateItemShouldDecreaseKeychronQuantityAndRedirectToItemDetails() {
         var itemId = 2L;
 
-        mockMvc.perform(MockMvcRequestBuilders.post("/items/{id}", itemId)
-                        .param("action", "MINUS"))
-                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
-                .andExpect(MockMvcResultMatchers.redirectedUrl("/items/2"));
+        Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.MINUS)).thenReturn(Mono.empty());
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("action", "MINUS");
+
+        webTestClient.post().uri("/items/{id}", itemId)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/items/" + itemId);
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.MINUS);
     }

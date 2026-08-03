@@ -4,8 +4,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
-import ru.yandex.practicum.mymarket.interfaces.ItemService;
+import ru.yandex.practicum.mymarket.mappers.CartMapper;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
@@ -16,7 +17,6 @@ import ru.yandex.practicum.mymarket.viewmodels.CartPageViewModel;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * <summary>
@@ -38,6 +38,7 @@ public class CartServiceImpl implements CartService {
      **/
     private final ItemRepository itemRepository;
     private final ItemMapper itemMapper;
+    private final CartMapper cartMapper;
 
     // endregion
 
@@ -45,10 +46,14 @@ public class CartServiceImpl implements CartService {
 
     public CartServiceImpl(
             final CartItemRepository cartItemRepository,
-            final ItemRepository itemRepository, ItemMapper itemMapper) {
+            final ItemRepository itemRepository,
+            final ItemMapper itemMapper,
+            final CartMapper cartMapper) {
+
         this.cartItemRepository = cartItemRepository;
         this.itemRepository = itemRepository;
         this.itemMapper = itemMapper;
+        this.cartMapper = cartMapper;
     }
 
     // endregion
@@ -65,19 +70,12 @@ public class CartServiceImpl implements CartService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public CartPageViewModel findCart() {
-        var items = cartItemRepository
-                .findAllByOrderByItemIdAsc()
-                .stream()
-                .map(itemMapper::toViewModel)
-                .toList();
-
-        var total = items
-                .stream()
-                .mapToLong(item -> item.price() * item.count())
-                .sum();
-
-        return new CartPageViewModel(items, total);
+    public Mono<CartPageViewModel> findCart() {
+        return cartItemRepository.findAllByOrderByItemIdAsc()
+                .flatMap(cartItem -> findModelById(cartItem.getItemId())
+                        .map(item -> itemMapper.toViewModel(cartItem, item)))
+                .collectList()
+                .map(cartMapper::toViewModel);
     }
 
     /**
@@ -90,12 +88,12 @@ public class CartServiceImpl implements CartService {
      **/
     @Transactional
     @Override
-    public void updateItemCount(final long itemId, final CartActionEnumModel cartAction) {
-        switch (cartAction) {
+    public Mono<Void> updateItemCount(final long itemId, final CartActionEnumModel cartAction) {
+        return switch (cartAction) {
             case PLUS -> addItem(itemId);
             case MINUS -> removeOneItem(itemId);
-            case DELETE -> cartItemRepository.findByItemId(itemId).ifPresent(cartItemRepository::delete);
-        }
+            case DELETE -> deleteItem(itemId);
+        };
     }
 
     /**
@@ -109,16 +107,16 @@ public class CartServiceImpl implements CartService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public Map<Long, Integer> findCountsForItems(final List<Long> itemIds) {
+    public Mono<Map<Long, Integer>> findCountsForItems(final List<Long> itemIds) {
         if (itemIds == null || itemIds.isEmpty()) {
-            return Map.of();
+            return Mono.just(Map.of());
         }
 
         return cartItemRepository.findAllByItemIdIn(itemIds)
-                .stream()
-                .collect(Collectors.toMap(
-                        cartItem -> cartItem.getItem().getId(),
-                        CartItemModel::getQuantity));
+                .collectMap(
+                        CartItemModel::getItemId,
+                        CartItemModel::getQuantity
+                );
     }
 
     /**
@@ -132,10 +130,10 @@ public class CartServiceImpl implements CartService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public int findCountForItem(final long itemId) {
+    public Mono<Integer> findCountForItem(final long itemId) {
         return cartItemRepository.findByItemId(itemId)
                 .map(CartItemModel::getQuantity)
-                .orElse(0);
+                .defaultIfEmpty(0);
     }
 
     /**
@@ -145,14 +143,14 @@ public class CartServiceImpl implements CartService {
      * </summary>
      * @param itemId Уникальный идентификатор добавляемого товара.
      **/
-    private void addItem(final long itemId) {
-        var cartItem = cartItemRepository
-                .findByItemId(itemId)
-                .orElseGet(() -> new CartItemModel(findModelById(itemId), 0));
+    private Mono<Void> addItem(final long itemId) {
+        return cartItemRepository.findByItemId(itemId)
+                .switchIfEmpty(findModelById(itemId).map(item -> new CartItemModel(item.getId(), 0)))
+                .flatMap(cartItem -> {
+                    cartItem.increase();
 
-        cartItem.increase();
-
-        cartItemRepository.save(cartItem);
+                    return cartItemRepository.save(cartItem).then();
+                });
     }
 
     /**
@@ -162,16 +160,31 @@ public class CartServiceImpl implements CartService {
      * </summary>
      * @param itemId Уникальный идентификатор изменяемого товара.
      **/
-    private void removeOneItem(final long itemId) {
-        cartItemRepository
-                .findByItemId(itemId)
-                .ifPresent(cartItem -> {
+    private Mono<Void> removeOneItem(final long itemId) {
+        return cartItemRepository.findByItemId(itemId)
+                .flatMap(cartItem -> {
                     cartItem.decrease();
 
                     if (cartItem.getQuantity() == 0) {
-                        cartItemRepository.delete(cartItem);
+                        return cartItemRepository.delete(cartItem);
                     }
+
+                    return cartItemRepository.save(cartItem).then();
                 });
+    }
+
+    /**
+     * <summary>
+     * Вспомогательный метод для полного удаления товарной позиции из корзины по её идентификатору.
+     * </summary>
+     * @param itemId Уникальный идентификатор удаляемого товара.
+     * <return>
+     * @return Реактивный контейнер Mono<Void>, сигнализирующий о завершении операции удаления.
+     * </return>
+     **/
+    private Mono<Void> deleteItem(final long itemId) {
+        return cartItemRepository.findByItemId(itemId)
+                .flatMap(cartItemRepository::delete);
     }
 
     /**
@@ -184,10 +197,10 @@ public class CartServiceImpl implements CartService {
      * </return>
      * @throws ResponseStatusException Если товар с указанным идентификатором отсутствует в базе данных (HTTP 404).
      **/
-    private ItemModel findModelById(final long itemId) {
+    private Mono<ItemModel> findModelById(final long itemId) {
         return itemRepository
                 .findById(itemId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found")));
     }
 
     // endregion

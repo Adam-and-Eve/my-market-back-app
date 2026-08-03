@@ -4,10 +4,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
+import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.mappers.OrderMapper;
+import ru.yandex.practicum.mymarket.models.CartItemModel;
+import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.models.OrderModel;
 import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
+import ru.yandex.practicum.mymarket.repositories.ItemRepository;
+import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
@@ -23,14 +30,16 @@ public class OrderServiceImpl implements OrderService {
     // region Fields
 
     /**
-     * Репозиторий для управления персистентным состоянием элементов корзины покупателя.
-     **/
-    private final CartItemRepository cartItemRepository;
-
-    /**
      * Репозиторий для выполнения операций над доменными моделями заказов.
      **/
     private final OrderRepository orderRepository;
+
+    /**
+     * <summary>
+     * Репозиторий для управления персистентным состоянием элементов корзины покупателя.
+     * </summary>
+     **/
+    private final OrderItemRepository orderItemRepository;
 
     /**
      * Компонент-маппер для трансформации доменных моделей заказов в их UI-представления.
@@ -42,12 +51,12 @@ public class OrderServiceImpl implements OrderService {
     // region Constructors
 
     public OrderServiceImpl(
-            final CartItemRepository cartItemRepository,
             final OrderRepository orderRepository,
+            final OrderItemRepository orderItemRepository,
             final OrderMapper orderMapper) {
 
-        this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
+        this.orderItemRepository = orderItemRepository;
         this.orderMapper = orderMapper;
     }
 
@@ -65,11 +74,9 @@ public class OrderServiceImpl implements OrderService {
      * </return>
      **/
     @Transactional(readOnly = true)
-    public List<OrderViewModel> findAll() {
+    public Flux<OrderViewModel> findAll() {
         return orderRepository.findAllByOrderByIdAsc()
-                .stream()
-                .map(orderMapper::toViewModel)
-                .toList();
+                .flatMap(this::buildOrderViewModel);
     }
 
     /**
@@ -84,41 +91,26 @@ public class OrderServiceImpl implements OrderService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public OrderViewModel findById(final long id) {
+    public Mono<OrderViewModel> findById(final long id) {
         return orderRepository
                 .findById(id)
-                .map(orderMapper::toViewModel)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found."));
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found.")))
+                .flatMap(this::buildOrderViewModel);
     }
-
 
     /**
      * <summary>
-     * Оформляет транзакцию покупки: выгружает все элементы из текущей корзины покупателя, переносит их
-     * в историческую структуру нового заказа с фиксацией цен, сохраняет заказ в БД и полностью очищает корзину.
+     * Вспомогательный метод для асинхронной загрузки позиций заказа из репозитория и формирования итоговой View Model через маппер.
      * </summary>
+     * @param order Исходная доменная модель заказа.
      * <return>
-     * @return Уникальный идентификатор созданного заказа, либо -1, если корзина покупателя оказалась пуста.
+     * @return Реактивный контейнер Mono с собранной моделью представления OrderViewModel.
      * </return>
      **/
-    @Transactional()
-    @Override
-    public long buy() {
-        var cartItems = cartItemRepository.findAllByOrderByItemIdAsc();
-
-        if (cartItems.isEmpty()) {
-            return -1;
-        }
-
-        var order = OrderModel.create();
-
-        cartItems.forEach(cartItem -> order.addItem(cartItem.getItem(), cartItem.getQuantity()));
-
-        var savedOrder = orderRepository.save(order);
-
-        cartItemRepository.deleteAll(cartItems);
-
-        return savedOrder.getId();
+    private Mono<OrderViewModel> buildOrderViewModel(final OrderModel order) {
+        return orderItemRepository.findAllByOrderIdOrderByIdAsc(order.getId())
+                .collectList()
+                .map(orderItems -> orderMapper.toViewModel(order, orderItems));
     }
 
     // endregion

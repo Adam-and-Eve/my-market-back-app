@@ -4,7 +4,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
+import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,23 +22,31 @@ import org.springframework.web.context.WebApplicationContext;
  **/
 @SpringBootTest
 @ActiveProfiles("test")
-@Transactional
 public class MyMarketAppApplicationTests {
 
 	// region Fields
 
 	@Autowired
-	protected WebApplicationContext webApplicationContext;
+	protected ApplicationContext applicationContext;
 
-	protected MockMvc mockMvc;
+	protected WebTestClient webTestClient;
+
+	@Autowired
+	private DatabaseClient databaseClient;
 
 	// endregion
 
 	// region Setup
 
 	@BeforeEach
-	void setUp() {
-		this.mockMvc = MockMvcBuilders.webAppContextSetup(this.webApplicationContext).build();
+	void clearDatabase() {
+		this.webTestClient = WebTestClient.bindToApplicationContext(applicationContext).build();
+
+		databaseClient.sql("DELETE FROM cart_items").then()
+				.then(databaseClient.sql("DELETE FROM items").then())
+				.then(databaseClient.sql("DELETE FROM order_items").then())
+				.then(databaseClient.sql("DELETE FROM orders").then())
+				.block();
 	}
 
 	// endregion

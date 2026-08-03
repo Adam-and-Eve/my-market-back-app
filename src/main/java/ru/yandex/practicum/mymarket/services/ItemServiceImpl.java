@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.helpers.CatalogHelper;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
@@ -18,8 +20,10 @@ import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PagingViewModel;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -82,7 +86,7 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public List<ItemModel> findAll() {
+    public Flux<ItemModel> findAll() {
         return itemRepository.findAll();
     }
 
@@ -98,11 +102,12 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public ItemViewModel findById(final long id) {
-        return itemRepository
-                .findById(id)
-                .map(item -> itemMapper.toViewModel(item, cartService.findCountForItem(item.getId())))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
+    public Mono<ItemViewModel> findById(final long id) {
+        return itemRepository.findById(id)
+                .flatMap(item -> cartService.findCountForItem(item.getId())
+                        .map(count -> itemMapper.toViewModel(item, count)))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
+
     }
 
     /**
@@ -118,16 +123,15 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public ItemModel findModelById(final long id) {
-        return itemRepository
-                .findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found."));
+    public Mono<ItemModel> findModelById(final long id) {
+        return itemRepository.findById(id)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
     }
 
     /**
      * <summary>
      * Выполняет построение страницы каталога товаров на основе переданных фильтров, правил сортировки и пагинации.
-     * Обеспечивает безопасную нормализацию параметров перед отправкой запроса в слой хранения данных.
+     * Запросы на фильтрацию, сортировку и выборку нужного окна данных делегируются на уровень базы данных.
      * </summary>
      * @param search Необработанная поисковая строка для фильтрации по названию или описанию.
      * @param sort Строковое имя стратегии сортировки элементов.
@@ -139,7 +143,7 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public CatalogPageViewModel findCatalog(
+    public Mono<CatalogPageViewModel> findCatalog(
             final String search,
             final String sort,
             final Integer pageNumber,
@@ -153,28 +157,75 @@ public class ItemServiceImpl implements ItemService {
 
         var normalizedPageSize = catalogHelper.normalizePageSize(pageSize);
 
-        var pageable = PageRequest.of(normalizedPageNumber - 1, normalizedPageSize, catalogHelper.resolveSort(itemSort));
 
-        var page = normalizedSearch.isBlank()
-                ? itemRepository.findAll(pageable)
-                : itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-          normalizedSearch,
-          normalizedSearch,
-          pageable
-        );
+        var springSort = catalogHelper.resolveSort(itemSort);
 
-        var items = page.getContent();
+        var pageable = PageRequest.of(normalizedPageNumber - 1, normalizedPageSize, springSort);
 
-        var itemIds = items.stream().map(ItemModel::getId).toList();
+        var itemsMono = itemRepository
+                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch, pageable)
+                .collectList();
 
-        var counts = cartService.findCountsForItems(itemIds);
+        var countMono = itemRepository
+                .countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch);
 
-        return new CatalogPageViewModel(
-                itemMapper.toRows(items, counts),
-                normalizedSearch,
-                itemSort.name(),
-                new PagingViewModel(normalizedPageSize, normalizedPageNumber, page.hasPrevious(), page.hasNext())
-        );
+        return Mono.zip(itemsMono, countMono)
+                .flatMap(tuple -> {
+                    var pageItems = tuple.getT1();
+                    var totalCount = tuple.getT2();
+
+                    return buildCatalogPage(
+                            pageItems,
+                            totalCount,
+                            normalizedSearch,
+                            itemSort,
+                            normalizedPageNumber,
+                            normalizedPageSize
+                    );
+                });
+    }
+
+    /**
+     * <summary>
+     * Обогащает отфильтрованную страницу товаров данными о количестве в корзине текущего пользователя
+     * и собирает итоговую View-модель страницы каталога.
+     * </summary>
+     * @param pageItems Список моделей товаров, полученный из БД для текущей страницы.
+     * @param totalCount Общее количество товаров в БД, удовлетворяющих критериям поиска.
+     * @param search Нормализованная поисковая строка, использованная при фильтрации.
+     * @param sort Примененная стратегия сортировки элементов каталога.
+     * @param pageNumber Номер текущей отображаемой страницы.
+     * @param pageSize Количество элементов, отображаемых на одной странице.
+     * <return>
+     * @return Реактивный контейнер Mono с заполненной моделью представления страницы каталога.
+     * </return>
+     **/
+    private Mono<CatalogPageViewModel> buildCatalogPage(
+            final List<ItemModel> pageItems,
+            final long totalCount,
+            final String search,
+            final ItemSortEnumModel sort,
+            final int pageNumber,
+            final int pageSize
+    ){
+        var hasPrevious = pageNumber > 1;
+
+        var hasNext = ((long) pageNumber * pageSize) < totalCount;
+
+        var itemIds = pageItems.stream().map(ItemModel::getId).toList();
+
+        return cartService.findCountsForItems(itemIds)
+                .map(counts -> new CatalogPageViewModel(
+                        itemMapper.toRows(pageItems, counts),
+                        search,
+                        sort.name(),
+                        new PagingViewModel(
+                                pageSize,
+                                pageNumber,
+                                hasPrevious,
+                                hasNext
+                        )
+                ));
     }
 
     // endregion

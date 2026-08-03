@@ -10,7 +10,7 @@ import java.util.List;
  * </summary>
  **/
 public record CatalogPageViewModel(
-        List<List<ItemViewModel>> items,
+        List<List<CatalogCellViewModel>> items,
         String search,
         String sort,
         PagingViewModel paging

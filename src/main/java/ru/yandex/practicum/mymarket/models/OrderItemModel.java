@@ -1,6 +1,8 @@
 package ru.yandex.practicum.mymarket.models;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
 /**
  * <summary>
@@ -9,7 +11,7 @@ import jakarta.persistence.*;
  * неизменность финансовой истории при последующих редактированиях основного каталога.
  * </summary>
  **/
-@Entity
+
 @Table(name = "order_items")
 public class OrderItemModel {
 
@@ -19,32 +21,31 @@ public class OrderItemModel {
      * Идентификатор позиции заказа.
      **/
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column("id")
     private Long id;
 
     /**
-     * Информация о заказе.
+     * Идентификатор заказа.
      **/
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "order_id", nullable = false)
-    private OrderModel order;
+    @Column("order_id")
+    private Long orderId;
 
     /**
      * Название товара, зафиксированное при оформлении заказа.
      **/
-    @Column(nullable = false)
+    @Column("title")
     private String title;
 
     /**
      * Историческая стоимость единицы товара на момент покупки.
      **/
-    @Column(nullable = false)
+    @Column("price")
     private long price;
 
     /**
      * Количество единиц товара, приобретенных в рамках данной позиции.
      **/
-    @Column(nullable = false)
+    @Column("quantity")
     private int quantity;
 
     // endregion
@@ -56,12 +57,28 @@ public class OrderItemModel {
     }
 
     public OrderItemModel(
-            final OrderModel order,
+            final Long orderId,
             final String title,
             final long price,
             final int quantity) {
 
-        this.order = order;
+        if (orderId == null) {
+            throw new IllegalArgumentException("Идентификатор заказа не может быть null");
+        }
+
+        if (title == null || title.isBlank()) {
+            throw new IllegalArgumentException("Наименование позиции заказа не может быть пустым");
+        }
+
+        if (price < 0) {
+            throw new IllegalArgumentException("Цена позиции заказа не может быть отрицательной");
+        }
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Количество в позиции заказа должно быть строго больше нуля");
+        }
+
+        this.orderId = orderId;
         this.title = title;
         this.price = price;
         this.quantity = quantity;
@@ -70,6 +87,30 @@ public class OrderItemModel {
     // endregion
 
     // region Properties
+
+    /**
+     * <summary>
+     * Возвращает идентификатор позиции заказа.
+     * </summary>
+     * <return>
+     * @return Идентификатор позиции заказа.
+     * </return>
+     **/
+    public Long getId() {
+        return id;
+    }
+
+    /**
+     * <summary>
+     * Возвращает идентификатор заказа.
+     * </summary>
+     * <return>
+     * @return Идентификатор заказа.
+     * </return>
+     **/
+    public Long getOrderId() {
+        return orderId;
+    }
 
     /**
      * <summary>

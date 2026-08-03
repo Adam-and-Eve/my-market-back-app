@@ -1,11 +1,11 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.viewmodels.CatalogPageViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
-
-import java.util.List;
 
 /**
  * <summary>
@@ -24,7 +24,7 @@ public interface ItemService {
      * @return Список доменных моделей всех существующих товаров.
      * </return>
      **/
-    public List<ItemModel> findAll();
+    public Flux<ItemModel> findAll();
 
     /**
      * <summary>
@@ -36,7 +36,7 @@ public interface ItemService {
      * </return>
      * @throws ResponseStatusException Если товар с указанным идентификатором не найден (HTTP 404).
      **/
-    public ItemViewModel findById(final long id);
+    public Mono<ItemViewModel> findById(final long id);
 
     /**
      * <summary>
@@ -49,7 +49,7 @@ public interface ItemService {
      * </return>
      * @throws ResponseStatusException Если товар с указанным идентификатором не найден (HTTP 404).
      **/
-    public ItemModel findModelById(final long id);
+    public Mono<ItemModel> findModelById(final long id);
 
     /**
      * <summary>
@@ -64,7 +64,7 @@ public interface ItemService {
      * @return Сформированная модель представления страницы каталога с сеткой товаров и метаданными навигации.
      * </return>
      **/
-    public CatalogPageViewModel findCatalog(
+    public Mono<CatalogPageViewModel> findCatalog(
             final String search,
             final String sort,
             final Integer pageNumber,

@@ -1,7 +1,11 @@
 package ru.yandex.practicum.mymarket.models;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,7 +14,6 @@ import java.util.List;
  * Доменная модель, представляющая оформленный заказ покупателя.
  * </summary>
  **/
-@Entity
 @Table(name = "orders")
 public class OrderModel {
 
@@ -20,13 +23,25 @@ public class OrderModel {
      * Уникальный идентификатор заказа в базе данных.
      **/
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column("id")
     private Long id;
+
+    /**
+     * Дата и время создания заказа.
+     **/
+    @Column("created_at")
+    private LocalDateTime createdAt;
+
+    /**
+     * Текущий статус заказа.
+     **/
+    @Column("status")
+    private String status;
 
     /**
      * Коллекция связанных исторических товарных позиций, входящих в данный заказ.
      **/
-    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Transient
     private List<OrderItemModel> items = new ArrayList<>();
 
     // endregion
@@ -34,7 +49,16 @@ public class OrderModel {
     // region Constructors
 
     protected OrderModel() {
+        this.createdAt = LocalDateTime.now();
+        this.status = "CREATED";
+    }
 
+    private OrderModel(
+            final LocalDateTime createdAt,
+            final String status) {
+
+        this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
+        this.status = status != null ? status : "CREATED";
     }
 
     // endregion
@@ -51,6 +75,30 @@ public class OrderModel {
      **/
     public Long getId(){
         return id;
+    }
+
+    /**
+     * <summary>
+     * Возвращает дату и время создания заказа.
+     * </summary>
+     * <return>
+     * @return Метка времени создания заказа.
+     * </return>
+     **/
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    /**
+     * <summary>
+     * Возвращает текущий статус заказа.
+     * </summary>
+     * <return>
+     * @return Строковое представление статуса.
+     * </return>
+     **/
+    public String getStatus() {
+        return status;
     }
 
     /**
@@ -77,7 +125,16 @@ public class OrderModel {
      * @param quantity Количество приобретаемых единиц товара.
      **/
     public void addItem(final ItemModel item, final int quantity) {
-        items.add(new OrderItemModel(this, item.getTitle(), item.getPrice(), quantity));
+
+        if (item == null) {
+            throw new IllegalArgumentException("Товар не может быть null при добавлении в заказ");
+        }
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Количество добавляемого в заказ товара должно быть строго больше нуля");
+        }
+
+        items.add(new OrderItemModel(id, item.getTitle(), item.getPrice(), quantity));
     }
 
     /**

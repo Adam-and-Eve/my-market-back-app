@@ -1,10 +1,16 @@
 package ru.yandex.practicum.mymarket.controllers;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.reactive.function.BodyInserters;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
 import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
@@ -31,11 +37,12 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
 
     /**
      * <summary>
-     * Проверяет отображение страницы корзины со списком добавленных товаров и корректным подсчетом общей стоимости.
+     * Проверяет отображение страницы корзины. Так как WebTestClient работает на уровне HTTP-ответов,
+     * мы проверяем успешный статус и наличие названий товаров в сгенерированном HTML-боди.
      * </summary>
      **/
     @Test
-    public void getCartShouldReturnCartPageWithItemsAndTotal() throws Exception
+    public void getCartShouldReturnCartPageWithItemsAndTotal()
     {
         var keychronKeyboard = new ItemViewModel(
                 2L,
@@ -61,31 +68,43 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
 
         var mockCartPage = new CartPageViewModel(cartItems, totalSum);
 
-        Mockito.when(cartService.findCart()).thenReturn(mockCartPage);
+        Mockito.when(cartService.findCart()).thenReturn(Mono.just(mockCartPage));
 
-        mockMvc.perform(MockMvcRequestBuilders.get("/cart/items"))
-                .andExpect(MockMvcResultMatchers.status().isOk())
-                .andExpect(MockMvcResultMatchers.view().name("cart"))
-                .andExpect(MockMvcResultMatchers.model().attributeExists("items", "total"))
-                .andExpect(MockMvcResultMatchers.model().attribute("items", cartItems))
-                .andExpect(MockMvcResultMatchers.model().attribute("total", totalSum));
+        webTestClient.get().uri("/cart/items")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(htmlBody -> {
+                    Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
+                    Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
+                });
     }
 
     /**
      * <summary>
-     * Проверяет успешное увеличение количества товара в корзине и последующий редирект.
+     * Проверяет успешное увеличение количества товара в корзине через передачу Form Data
+     * и последующий HTTP-редирект.
      * </summary>
      **/
     @Test
-    public void updateCartItemShouldIncreaseQuantityAndRedirectToCart() throws Exception
+    public void updateCartItemShouldIncreaseQuantityAndRedirectToCart()
     {
         var itemId = 2L;
 
-        mockMvc.perform(MockMvcRequestBuilders.post("/cart/items")
-                        .param("id", String.valueOf(itemId))
-                        .param("action", "PLUS"))
-                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
-                .andExpect(MockMvcResultMatchers.redirectedUrl("/cart/items"));
+        Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", String.valueOf(itemId));
+
+        formData.add("action", "PLUS");
+
+        webTestClient.post().uri("/cart/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/cart/items");
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.PLUS);
     }
@@ -96,15 +115,24 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
      * </summary>
      **/
     @Test
-    public void updateCartItemShouldRemoveItemWhenActionIsDelete() throws Exception
+    public void updateCartItemShouldRemoveItemWhenActionIsDelete()
     {
         var itemId = 3L;
 
-        mockMvc.perform(MockMvcRequestBuilders.post("/cart/items")
-                        .param("id", String.valueOf(itemId))
-                        .param("action", "DELETE"))
-                .andExpect(MockMvcResultMatchers.status().is3xxRedirection())
-                .andExpect(MockMvcResultMatchers.redirectedUrl("/cart/items"));
+        Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.DELETE)).thenReturn(Mono.empty());
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", String.valueOf(itemId));
+
+        formData.add("action", "DELETE");
+
+        webTestClient.post().uri("/cart/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/cart/items");
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.DELETE);
     }

@@ -17,18 +17,7 @@ public record ItemViewModel(
 
     // region Methods
 
-    /**
-     * <summary>
-     * Создает пустой объект-заглушку (placeholder) модели представления товара.
-     * Используется для заполнения пустых ячеек в сеточной разметке шаблона или инициализации дефолтных состояний.
-     * </summary>
-     * <return>
-     * @return Экземпляр ItemViewModel с инициализированными дефолтными значениями и отрицательным ID.
-     * </return>
-     **/
-    public static ItemViewModel placeholder(){
-        return new ItemViewModel(-1L, "", "", "", 0, 0);
-    }
+
 
     // endregion
 }

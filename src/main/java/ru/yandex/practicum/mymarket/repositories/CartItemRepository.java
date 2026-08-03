@@ -1,10 +1,11 @@
 package ru.yandex.practicum.mymarket.repositories;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.Collection;
 
 /**
  * <summary>
@@ -12,7 +13,7 @@ import java.util.Optional;
  * Расширяет JpaRepository для реализации базовых CRUD-операций над сущностями CartItemModel.
  * </summary>
  **/
-public interface CartItemRepository extends JpaRepository<CartItemModel, Long> {
+public interface CartItemRepository extends ReactiveCrudRepository<CartItemModel, Long> {
 
     // region Methods
 
@@ -25,7 +26,7 @@ public interface CartItemRepository extends JpaRepository<CartItemModel, Long> {
      * @return Контейнер Optional, содержащий сущность элемента корзины, если она найдена, иначе Optional.empty().
      * </return>
      **/
-    Optional<CartItemModel> findByItemId(final long itemId);
+    Mono<CartItemModel> findByItemId(final long itemId);
 
     /**
      * <summary>
@@ -37,7 +38,7 @@ public interface CartItemRepository extends JpaRepository<CartItemModel, Long> {
      * @return Список доменных моделей элементов корзины, соответствующих переданным идентификаторам.
      * </return>
      **/
-    List<CartItemModel> findAllByItemIdIn(List<Long> itemIds);
+    Flux<CartItemModel> findAllByItemIdIn(Collection<Long> itemIds);
 
     /**
      * <summary>
@@ -48,7 +49,7 @@ public interface CartItemRepository extends JpaRepository<CartItemModel, Long> {
      * @return Список доменных моделей всех элементов корзины, упорядоченных по ID товара.
      * </return>
      **/
-    List<CartItemModel> findAllByOrderByItemIdAsc();
+    Flux<CartItemModel> findAllByOrderByItemIdAsc();
 
     // endregion
 }

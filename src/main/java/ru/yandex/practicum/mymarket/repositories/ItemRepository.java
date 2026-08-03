@@ -1,8 +1,9 @@
 package ru.yandex.practicum.mymarket.repositories;
 
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.ItemModel;
 
 /**
@@ -10,7 +11,7 @@ import ru.yandex.practicum.mymarket.models.ItemModel;
  * Интерфейс репозитория для работы с сущностями товаров в базе данных.
  * </summary>
  **/
-public interface ItemRepository extends JpaRepository<ItemModel, Long> {
+public interface ItemRepository extends ReactiveCrudRepository<ItemModel, Long> {
 
     // region Methods
 
@@ -26,10 +27,25 @@ public interface ItemRepository extends JpaRepository<ItemModel, Long> {
      * @return Страница (Page), содержащая отфильтрованные модели товаров, соответствующие критериям поиска.
      * </return>
      **/
-    Page<ItemModel> findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+    Flux<ItemModel> findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
             final String title,
             final String description,
             final Pageable pageable
+    );
+
+    /**
+     * <summary>
+     * Считает общее количество товаров, содержащих указанную поисковую подстроку в наименовании или описании, без учета регистра.
+     * </summary>
+     * @param title Часть наименования товара для проверки совпадения.
+     * @param description Часть текстового описания товара для проверки совпадения.
+     * <return>
+     * @return Реактивный контейнер Mono, содержащий общее количество подходящих товаров.
+     * </return>
+     **/
+    Mono<Long> countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+            final String title,
+            final String description
     );
 
     // endregion

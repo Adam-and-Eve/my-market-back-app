@@ -1,8 +1,8 @@
 package ru.yandex.practicum.mymarket.interfaces;
 
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
-
-import java.util.List;
 
 /**
  * <summary>
@@ -21,7 +21,7 @@ public interface OrderService {
      * @return Список моделей представления всех существующих заказов.
      * </return>
      **/
-    public List<OrderViewModel> findAll();
+    public Flux<OrderViewModel> findAll();
 
     /**
      * <summary>
@@ -32,19 +32,7 @@ public interface OrderService {
      * @return Сконвертированная модель представления заказа OrderViewModel.
      * </return>
      **/
-    public OrderViewModel findById(final long id);
-
-    /**
-     * <summary>
-     * Оформляет покупку на основе текущего содержимого корзины покупателя.
-     * Переносит все активные элементы корзины в историческую структуру нового заказа, фиксируя цены,
-     * после чего полностью очищает корзину.
-     * </summary>
-     * <return>
-     * @return Уникальный идентификатор созданного заказа, либо -1, если корзина была пуста.
-     * </return>
-     **/
-    public long buy();
+    public Mono<OrderViewModel> findById(final long id);
 
     // endregion
 }

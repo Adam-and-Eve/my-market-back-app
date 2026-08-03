@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.repositories;
 
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
@@ -24,13 +25,13 @@ public class OrderRepositoryIntegrationTest extends MyMarketAppApplicationTests 
 
     /**
      * <summary>
-     * Проверяет, что при отсутствии заказов в базе данных метод возвращает пустой список.
+     * Проверяет, что при отсутствии заказов в базе данных реактивный запрос возвращает пустой список.
      * </summary>
      **/
     @Test
     void findAllByOrderByIdAscShouldReturnEmptyListWhenNoOrdersExist()
     {
-        var orders = orderRepository.findAllByOrderByIdAsc();
+        var orders = orderRepository.findAllByOrderByIdAsc().collectList().block();
 
         Assertions.assertNotNull(orders);
 
@@ -51,13 +52,21 @@ public class OrderRepositoryIntegrationTest extends MyMarketAppApplicationTests 
 
         var thirdOrder = OrderModel.create();
 
-        orderRepository.save(firstOrder);
+        var savedFirst = orderRepository.save(firstOrder).block();
 
-        orderRepository.save(secondOrder);
+        var savedSecond = orderRepository.save(secondOrder).block();
 
-        orderRepository.save(thirdOrder);
+        var savedThird = orderRepository.save(thirdOrder).block();
 
-        var sortedOrders = orderRepository.findAllByOrderByIdAsc();
+        Assertions.assertNotNull(savedFirst);
+
+        Assertions.assertNotNull(savedSecond);
+
+        Assertions.assertNotNull(savedThird);
+
+        var sortedOrders = orderRepository.findAllByOrderByIdAsc().collectList().block();
+
+        Assertions.assertNotNull(sortedOrders);
 
         Assertions.assertEquals(3, sortedOrders.size());
 
@@ -65,11 +74,11 @@ public class OrderRepositoryIntegrationTest extends MyMarketAppApplicationTests 
 
         Assertions.assertTrue(sortedOrders.get(1).getId() < sortedOrders.get(2).getId());
 
-        Assertions.assertEquals(firstOrder.getId(), sortedOrders.get(0).getId());
+        Assertions.assertEquals(savedFirst.getId(), sortedOrders.get(0).getId());
 
-        Assertions.assertEquals(secondOrder.getId(), sortedOrders.get(1).getId());
+        Assertions.assertEquals(savedSecond.getId(), sortedOrders.get(1).getId());
 
-        Assertions.assertEquals(thirdOrder.getId(), sortedOrders.get(2).getId());
+        Assertions.assertEquals(savedThird.getId(), sortedOrders.get(2).getId());
     }
 
     // endregion

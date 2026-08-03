@@ -6,7 +6,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
+import ru.yandex.practicum.mymarket.interfaces.PurchaseService;
 
 /**
  * <summary>
@@ -23,13 +25,18 @@ public class OrderController {
      **/
     private final OrderService orderService;
 
+    private final PurchaseService purchaseService;
+
     // endregion
 
     // region Constructors
 
-    public OrderController(final OrderService orderService) {
+    public OrderController(
+            final OrderService orderService,
+            final PurchaseService purchaseService) {
 
         this.orderService = orderService;
+        this.purchaseService = purchaseService;
     }
 
     // endregion
@@ -46,12 +53,13 @@ public class OrderController {
      * </return>
      **/
     @GetMapping("/orders")
-    public String getOrders(Model model) {
-        var orders = orderService.findAll();
-
-        model.addAttribute("orders", orders);
-
-        return "orders";
+    public Mono<String> getOrders(Model model) {
+        return orderService.findAll()
+                .collectList()
+                .doOnNext(orders -> {
+                    model.addAttribute("orders", orders);
+                })
+                .thenReturn("orders");
     }
 
     /**
@@ -66,17 +74,17 @@ public class OrderController {
      * </return>
      **/
     @GetMapping("/orders/{id}")
-    public String getOrder(
+    public Mono<String> getOrder(
             @PathVariable final long id,
             @RequestParam(defaultValue = "false") final boolean newOrder,
             Model model
     ){
-        var order = orderService.findById(id);
-
-        model.addAttribute("order", order);
-        model.addAttribute("newOrder", newOrder);
-
-        return "order";
+        return orderService.findById(id)
+                .doOnNext(order -> {
+                    model.addAttribute("order", order);
+                    model.addAttribute("newOrder", newOrder);
+                })
+                .thenReturn("order");
     }
 
     /**
@@ -88,14 +96,10 @@ public class OrderController {
      * </return>
      **/
     @PostMapping("/buy")
-    public String buy() {
-        var orderId = orderService.buy();
-
-        if (orderId == -1) {
-            return "redirect:/cart/items";
-        }
-
-        return "redirect:/orders/" + orderId + "?newOrder=true";
+    public Mono<String> buy() {
+        return purchaseService.buy()
+                .map(orderId -> "redirect:/orders/" + orderId + "?newOrder=true")
+                .defaultIfEmpty("redirect:/cart/items");
     }
 
     // endregion
