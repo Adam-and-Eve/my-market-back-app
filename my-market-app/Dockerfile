@@ -9,7 +9,7 @@ COPY my-market-app/pom.xml ./my-market-app/
 
 COPY api/ ./api/
 
-RUN mvn package -DskipTests --fail-never -B -ntp
+RUN mvn compile -DskipTests -B -ntp
 
 COPY my-market-app/src ./my-market-app/src/
 

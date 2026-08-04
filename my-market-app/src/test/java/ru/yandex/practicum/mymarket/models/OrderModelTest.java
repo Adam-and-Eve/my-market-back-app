@@ -29,7 +29,7 @@ public class OrderModelTest {
 
         Assertions.assertNotNull(order.getCreatedAt());
 
-        Assertions.assertEquals("CREATED", order.getStatus());
+        Assertions.assertEquals(OrderModel.STATUS_PENDING, order.getStatus());
 
         Assertions.assertNotNull(order.getItems());
 
@@ -51,7 +51,7 @@ public class OrderModelTest {
 
         Assertions.assertNotNull(order.getCreatedAt());
 
-        Assertions.assertEquals("CREATED", order.getStatus());
+        Assertions.assertEquals(OrderModel.STATUS_PENDING, order.getStatus());
 
         Assertions.assertNotNull(order.getItems());
 

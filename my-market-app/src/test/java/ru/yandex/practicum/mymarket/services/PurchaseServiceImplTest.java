@@ -26,6 +26,7 @@ import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.CheckoutResultViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.OrderPaymentResultViewModel;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -79,8 +80,8 @@ public class PurchaseServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет успешный цикл покупки: расчет стоимости, успешную оплату через платежный шлюз,
-     * создание шапки и позиций заказа, очистку корзины и возврат статуса PAID с ID заказа.
+     * Проверяет успешный цикл покупки: сохранение заказа в статусе PENDING, успешную оплату,
+     * обновление статуса до PAID и очистку корзины.
      * </summary>
      **/
     @Test
@@ -93,6 +94,8 @@ public class PurchaseServiceImplTest {
 
         var totalAmount = itemPrice * cartQuantity;
 
+        var expectedOrderId = 42L;
+
         var item = new ItemModel("Novation Launchkey", "Studio MIDI", "/img.png", itemPrice);
 
         ReflectionTestUtils.setField(item, "id", itemId);
@@ -101,32 +104,46 @@ public class PurchaseServiceImplTest {
 
         var cartItemsList = List.of(cartItem);
 
-        var expectedOrderId = 42L;
-
-        var savedOrderStub = OrderModel.create();
-
-        ReflectionTestUtils.setField(savedOrderStub, "id", expectedOrderId);
-
         var paymentResult = OrderPaymentResultViewModel.success(1000000L);
+
+        List<String> capturedStatuses = new ArrayList<>();
 
         Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.just(cartItem));
 
         Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(item));
 
-        Mockito.when(paymentClientService.pay(totalAmount)).thenReturn(Mono.just(paymentResult));
+        Mockito.when(orderRepository.save(Mockito.any(OrderModel.class))).thenAnswer(invocation -> {
+            OrderModel order = invocation.getArgument(0);
 
-        Mockito.when(orderRepository.save(Mockito.any(OrderModel.class))).thenReturn(Mono.just(savedOrderStub));
+            capturedStatuses.add(order.getStatus());
+
+            if (order.getId() == null) {
+                ReflectionTestUtils.setField(order, "id", expectedOrderId);
+            }
+
+            return Mono.just(order);
+        });
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<OrderItemModel>> listCaptor = ArgumentCaptor.forClass(List.class);
 
         Mockito.doReturn(Flux.empty()).when(orderItemRepository).saveAll(listCaptor.capture());
 
+        Mockito.when(paymentClientService.pay(totalAmount)).thenReturn(Mono.just(paymentResult));
+
         Mockito.when(cartItemRepository.deleteAll(cartItemsList)).thenReturn(Mono.empty());
 
         StepVerifier.create(purchaseService.buy())
                 .expectNext(CheckoutResultViewModel.paid(expectedOrderId))
                 .verifyComplete();
+
+        Mockito.verify(orderRepository, Mockito.times(2)).save(Mockito.any(OrderModel.class));
+
+        Assertions.assertEquals(2, capturedStatuses.size());
+
+        Assertions.assertEquals(OrderModel.STATUS_PENDING, capturedStatuses.get(0));
+
+        Assertions.assertEquals(OrderModel.STATUS_PAID, capturedStatuses.get(1));
 
         List<OrderItemModel> savedOrderItems = listCaptor.getValue();
 
@@ -144,27 +161,25 @@ public class PurchaseServiceImplTest {
 
         Assertions.assertEquals(cartQuantity, savedOrderItem.getQuantity());
 
-        Mockito.verify(itemRepository, Mockito.times(2)).findById(itemId);
-
         Mockito.verify(paymentClientService, Mockito.times(1)).pay(totalAmount);
-
-        Mockito.verify(orderItemRepository, Mockito.times(1)).saveAll(Mockito.any(Iterable.class));
 
         Mockito.verify(cartItemRepository, Mockito.times(1)).deleteAll(cartItemsList);
     }
 
     /**
      * <summary>
-     * Проверяет отклонение покупки при отказе платежного шлюза без создания заказа и без очистки корзины.
+     * Проверяет перевод заказа в статус PAYMENT_FAILED и сохранение содержимого корзины при отказе платежного шлюза.
      * </summary>
      **/
     @Test
-    void buyShouldReturnRejectedWhenPaymentFails() {
+    void buyShouldMarkOrderAsPaymentFailedAndNotClearCartWhenPaymentFails() {
         var itemId = 100L;
 
         var cartQuantity = 1;
 
         var itemPrice = 45000L;
+
+        var expectedOrderId = 10L;
 
         var item = new ItemModel("Novation Launchkey", "Studio MIDI", "/img.png", itemPrice);
 
@@ -174,9 +189,25 @@ public class PurchaseServiceImplTest {
 
         var paymentResult = OrderPaymentResultViewModel.rejected(0L, "Insufficient funds");
 
+        List<String> capturedStatuses = new ArrayList<>();
+
         Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.just(cartItem));
 
         Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(item));
+
+        Mockito.when(orderRepository.save(Mockito.any(OrderModel.class))).thenAnswer(invocation -> {
+            OrderModel order = invocation.getArgument(0);
+
+            capturedStatuses.add(order.getStatus());
+
+            if (order.getId() == null) {
+                ReflectionTestUtils.setField(order, "id", expectedOrderId);
+            }
+
+            return Mono.just(order);
+        });
+
+        Mockito.doReturn(Flux.empty()).when(orderItemRepository).saveAll(Mockito.anyList());
 
         Mockito.when(paymentClientService.pay(itemPrice)).thenReturn(Mono.just(paymentResult));
 
@@ -184,7 +215,85 @@ public class PurchaseServiceImplTest {
                 .expectNext(CheckoutResultViewModel.rejected("Insufficient funds"))
                 .verifyComplete();
 
-        Mockito.verifyNoInteractions(orderRepository, orderItemRepository);
+        Mockito.verify(orderRepository, Mockito.times(2)).save(Mockito.any(OrderModel.class));
+
+        Assertions.assertEquals(2, capturedStatuses.size());
+
+        Assertions.assertEquals(OrderModel.STATUS_PENDING, capturedStatuses.get(0));
+
+        Assertions.assertEquals(OrderModel.STATUS_PAYMENT_FAILED, capturedStatuses.get(1));
+
+        Mockito.verify(cartItemRepository, Mockito.never()).deleteAll(Mockito.anyList());
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что при сбое сохранения шапки заказа paymentClientService.pay() не вызывается.
+     * </summary>
+     **/
+    @Test
+    void buyShouldNotCallPaymentWhenOrderSaveFails() {
+        var itemId = 100L;
+
+        var item = new ItemModel("Novation Launchkey", "Studio MIDI", "/img.png", 45000L);
+
+        ReflectionTestUtils.setField(item, "id", itemId);
+
+        var cartItem = new CartItemModel(itemId, 1);
+
+        Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.just(cartItem));
+
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(item));
+
+        Mockito.when(orderRepository.save(Mockito.any(OrderModel.class)))
+                .thenReturn(Mono.error(new RuntimeException("Database connection failure")));
+
+        StepVerifier.create(purchaseService.buy())
+                .expectError(RuntimeException.class)
+                .verify();
+
+        Mockito.verifyNoInteractions(paymentClientService);
+
+        Mockito.verifyNoInteractions(orderItemRepository);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что при сбое сохранения позиций заказа (orderItemRepository.saveAll) paymentClientService.pay() не вызывается.
+     * </summary>
+     **/
+    @Test
+    void buyShouldNotCallPaymentWhenOrderItemSaveFails() {
+        var itemId = 100L;
+
+        var expectedOrderId = 50L;
+
+        var item = new ItemModel("Novation Launchkey", "Studio MIDI", "/img.png", 45000L);
+
+        ReflectionTestUtils.setField(item, "id", itemId);
+
+        var cartItem = new CartItemModel(itemId, 1);
+
+        Mockito.when(cartItemRepository.findAllByOrderByItemIdAsc()).thenReturn(Flux.just(cartItem));
+
+        Mockito.when(itemRepository.findById(itemId)).thenReturn(Mono.just(item));
+
+        Mockito.when(orderRepository.save(Mockito.any(OrderModel.class))).thenAnswer(invocation -> {
+            OrderModel order = invocation.getArgument(0);
+
+            ReflectionTestUtils.setField(order, "id", expectedOrderId);
+
+            return Mono.just(order);
+        });
+
+        Mockito.when(orderItemRepository.saveAll(Mockito.anyList()))
+                .thenReturn(Flux.error(new RuntimeException("Error saving order items")));
+
+        StepVerifier.create(purchaseService.buy())
+                .expectError(RuntimeException.class)
+                .verify();
+
+        Mockito.verifyNoInteractions(paymentClientService);
 
         Mockito.verify(cartItemRepository, Mockito.never()).deleteAll(Mockito.anyList());
     }
@@ -206,17 +315,13 @@ public class PurchaseServiceImplTest {
 
         StepVerifier.create(purchaseService.buy())
                 .expectErrorMatches(throwable ->
-                        {
-                            if (!(throwable instanceof ResponseStatusException) ||
-                                    !((ResponseStatusException) throwable).getStatusCode().equals(HttpStatus.NOT_FOUND))
-                                return false;
-                            assert ((ResponseStatusException) throwable).getReason() != null;
-                            return ((ResponseStatusException) throwable).getReason().equals("Item not found in catalog");
-                        }
+                        throwable instanceof ResponseStatusException rse &&
+                                rse.getStatusCode().equals(HttpStatus.NOT_FOUND) &&
+                                "Item not found in catalog".equals(rse.getReason())
                 )
                 .verify();
 
-        Mockito.verify(orderItemRepository, Mockito.never()).saveAll(Mockito.anyList());
+        Mockito.verifyNoInteractions(orderRepository, orderItemRepository, paymentClientService);
 
         Mockito.verify(cartItemRepository, Mockito.never()).deleteAll(Mockito.anyList());
     }

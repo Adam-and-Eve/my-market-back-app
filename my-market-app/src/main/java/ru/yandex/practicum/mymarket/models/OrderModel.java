@@ -17,6 +17,16 @@ import java.util.List;
 @Table(name = "orders")
 public class OrderModel {
 
+    // region Constants
+
+    public static final String STATUS_PENDING = "PENDING";
+
+    public static final String STATUS_PAID = "PAID";
+
+    public static final String STATUS_PAYMENT_FAILED = "PAYMENT_FAILED";
+
+    // endregion
+
     // region Fields
 
     /**
@@ -42,7 +52,7 @@ public class OrderModel {
      * Коллекция связанных исторических товарных позиций, входящих в данный заказ.
      **/
     @Transient
-    private List<OrderItemModel> items = new ArrayList<>();
+    private final List<OrderItemModel> items = new ArrayList<>();
 
     // endregion
 
@@ -50,7 +60,7 @@ public class OrderModel {
 
     protected OrderModel() {
         this.createdAt = LocalDateTime.now();
-        this.status = "CREATED";
+        this.status = STATUS_PENDING;
     }
 
     private OrderModel(
@@ -58,7 +68,7 @@ public class OrderModel {
             final String status) {
 
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
-        this.status = status != null ? status : "CREATED";
+        this.status = status != null ? status : STATUS_PENDING;
     }
 
     // endregion
@@ -119,6 +129,24 @@ public class OrderModel {
 
     /**
      * <summary>
+     * Переводит статус заказа в состояние успешной оплаты.
+     * </summary>
+     **/
+    public void markAsPaid() {
+        this.status = STATUS_PAID;
+    }
+
+    /**
+     * <summary>
+     * Переводит статус заказа в состояние ошибки оплаты.
+     * </summary>
+     **/
+    public void markAsPaymentFailed() {
+        this.status = STATUS_PAYMENT_FAILED;
+    }
+
+    /**
+     * <summary>
      * Создает и добавляет новую историческую позицию в заказ на основе переданной модели товара и количества.
      * </summary>
      * @param item Исходная доменная модель товара из каталога для фиксации его актуальных метрик.
@@ -146,7 +174,7 @@ public class OrderModel {
      * </return>
      **/
     public static OrderModel create() {
-        return new OrderModel();
+        return new OrderModel(LocalDateTime.now(), STATUS_PENDING);
     }
 
     // endregion

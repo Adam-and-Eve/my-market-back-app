@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.helpers.PaymentHelper;
 import ru.yandex.practicum.mymarket.interfaces.PaymentClientService;
@@ -90,7 +91,15 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      * </return>
      **/
     public Mono<OrderPaymentResultViewModel> pay(final long amount) {
+        if (amount <= 0) {
+            return Mono.error(new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Сумма платежа должна быть больше нуля"
+            ));
+        }
+
         PaymentRequest request = new PaymentRequest().amount(amount);
+
         return paymentsApi.pay(request)
                 .map(paymentMapper::toOrderPaymentResultViewModel)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)

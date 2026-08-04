@@ -26,6 +26,11 @@ public class CatalogHelper {
      **/
     private static final int DEFAULT_PAGE_SIZE = 5;
 
+    /**
+     * Максимально допустимое количество товаров на одной странице.
+     **/
+    private static final int MAX_PAGE_SIZE = 100;
+
     // endregion
 
     // region Methods
@@ -77,7 +82,7 @@ public class CatalogHelper {
         if (pageSize == null || pageSize < 1) {
             return DEFAULT_PAGE_SIZE;
         }
-        return pageSize;
+        return Math.min(pageSize, MAX_PAGE_SIZE);
     }
 
     /**

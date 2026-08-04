@@ -142,7 +142,6 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-
         formData.add("id", String.valueOf(itemId));
 
         formData.add("action", "PLUS");
@@ -178,6 +177,8 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
 
+        formData.add("id", String.valueOf(itemId));
+
         formData.add("action", "MINUS");
 
         webTestClient.post().uri("/items/{id}", itemId)
@@ -188,6 +189,179 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 .expectHeader().valueEquals("Location", "/items/" + itemId);
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.MINUS);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос в витрине без указания действия (action == null) возвращает ошибку 400 Bad Request.
+     * </summary>
+     **/
+    @Test
+    public void updateCatalogItemShouldReturnBadRequestWhenActionIsNull() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", "4");
+
+        webTestClient.post().uri("/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService, itemService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос в витрине без указания идентификатора товара (id == null) возвращает ошибку 400 Bad Request.
+     * </summary>
+     **/
+    @Test
+    public void updateCatalogItemShouldReturnBadRequestWhenIdIsNull() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("action", "PLUS");
+
+        webTestClient.post().uri("/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService, itemService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос в витрине с неизвестным типом действия возвращает ошибку 400 Bad Request.
+     * </summary>
+     **/
+    @Test
+    public void updateCatalogItemShouldReturnBadRequestWhenActionIsInvalid() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", "4");
+
+        formData.add("action", "INVALID_ACTION");
+
+        webTestClient.post().uri("/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService, itemService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос со страницы товара без указания действия (action == null) возвращает ошибку 400 Bad Request.
+     * </summary>
+     **/
+    @Test
+    public void updateItemShouldReturnBadRequestWhenActionIsNull() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", "2");
+
+        webTestClient.post().uri("/items/{id}", 2L)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService, itemService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос со страницы товара с некорректным экшеном возвращает ошибку 400 Bad Request.
+     * </summary>
+     **/
+    @Test
+    public void updateItemShouldReturnBadRequestWhenActionIsInvalid() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", "2");
+
+        formData.add("action", "UNKNOWN_ACTION");
+
+        webTestClient.post().uri("/items/{id}", 2L)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService, itemService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет успешную обработку GET-запроса без указания размера страницы (pageSize = null).
+     * </summary>
+     **/
+    @Test
+    public void getCatalogShouldHandleNullPageSize() {
+        var mockPaging = new PagingViewModel(5, 1, false, false);
+
+        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
+
+        Mockito.when(itemService.findCatalog(null, null, null, null))
+                .thenReturn(Mono.just(mockPage));
+
+        webTestClient.get().uri("/items")
+                .exchange()
+                .expectStatus().isOk();
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(null, null, null, null);
+    }
+
+    /**
+     * <summary>
+     * Проверяет передачу значения pageSize = 0 в сервис каталога.
+     * </summary>
+     **/
+    @Test
+    public void getCatalogShouldPassZeroPageSizeToService() {
+        var mockPaging = new PagingViewModel(5, 1, false, false);
+
+        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
+
+        Mockito.when(itemService.findCatalog(null, null, null, 0))
+                .thenReturn(Mono.just(mockPage));
+
+        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("pageSize", 0)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(null, null, null, 0);
+    }
+
+    /**
+     * <summary>
+     * Проверяет передачу значения pageSize = 1000000 в сервис каталога.
+     * </summary>
+     **/
+    @Test
+    public void getCatalogShouldPassHugePageSizeToService() {
+        var hugePageSize = 1_000_000;
+
+        var mockPaging = new PagingViewModel(100, 1, false, false);
+
+        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
+
+        Mockito.when(itemService.findCatalog(null, null, null, hugePageSize))
+                .thenReturn(Mono.just(mockPage));
+
+        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("pageSize", hugePageSize)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(null, null, null, hugePageSize);
     }
 
     // endregion

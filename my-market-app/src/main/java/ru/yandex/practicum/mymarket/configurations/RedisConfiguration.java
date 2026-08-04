@@ -2,6 +2,7 @@ package ru.yandex.practicum.mymarket.configurations;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
@@ -28,18 +29,17 @@ public class RedisConfiguration {
      * </return>
      **/
     @Bean
-    public ReactiveRedisTemplate<String, Object> reactiveJsonRedisTemplate(
+    @Primary
+    public ReactiveRedisTemplate<String, String> reactiveJsonRedisTemplate(
             ReactiveRedisConnectionFactory connectionFactory
     ) {
-        var keySerializer = new StringRedisSerializer();
-
-        var valueSerializer = RedisSerializer.json();
+        var stringSerializer = new StringRedisSerializer();
 
         var serializationContext = RedisSerializationContext
-                .<String, Object>newSerializationContext(keySerializer)
-                .value(valueSerializer)
-                .hashKey(keySerializer)
-                .hashValue(valueSerializer)
+                .<String, String>newSerializationContext(stringSerializer)
+                .value(stringSerializer)
+                .hashKey(stringSerializer)
+                .hashValue(stringSerializer)
                 .build();
 
         return new ReactiveRedisTemplate<>(connectionFactory, serializationContext);

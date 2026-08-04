@@ -70,7 +70,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public Flux<OrderViewModel> findAll() {
         return orderRepository.findAllByOrderByIdAsc()
-                .flatMap(this::buildOrderViewModel);
+                .flatMapSequential(this::buildOrderViewModel);
     }
 
     /**

@@ -1,5 +1,6 @@
 package ru.yandex.practicum.mymarket.controllers;
 
+import jakarta.validation.Valid;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -72,7 +73,7 @@ public class CartController {
      **/
     @PostMapping("/cart/items")
     public Mono<String> updateCartItem(
-            @ModelAttribute CartItemFormViewModel form,
+            @Valid @ModelAttribute CartItemFormViewModel form,
             Model model){
 
         return cartService.updateItemCount(form.getId(), form.getAction())

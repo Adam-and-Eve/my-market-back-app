@@ -9,7 +9,7 @@ COPY payment-service/pom.xml ./payment-service/
 
 COPY api/ ./api/
 
-RUN mvn compile -DskipTests --fail-never -B -ntp
+RUN mvn compile -DskipTests -B -ntp
 
 COPY payment-service/src ./payment-service/src/
 

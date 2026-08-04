@@ -1,5 +1,6 @@
 package ru.yandex.practicum.mymarket.viewmodels;
 
+import jakarta.validation.constraints.NotNull;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 
 /**
@@ -17,6 +18,7 @@ public class CartItemFormViewModel {
      * Уникальный идентификатор товара.
      * </summary>
      **/
+    @NotNull(message = "Идентификатор товара не может быть null")
     private Long id;
 
     /**
@@ -52,6 +54,7 @@ public class CartItemFormViewModel {
      * Тип действия, выполняемого над элементом корзины.
      * </summary>
      **/
+    @NotNull(message = "Действие над корзиной не может быть null")
     private CartActionEnumModel action;
 
     // endregion

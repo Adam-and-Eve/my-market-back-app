@@ -20,6 +20,7 @@ import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
+import java.time.Duration;
 import java.util.List;
 
 /**
@@ -76,6 +77,77 @@ public class OrderServiceImplTest {
                         result.size() == 1 && result.getFirst() == mockViewModel
                 )
                 .verifyComplete();
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что метод findAll сохраняет строго исходный порядок следования заказов (1, 2, 3),
+     * даже если асинхронная загрузка позиций для первого заказа происходит с задержкой.
+     * </summary>
+     **/
+    @Test
+    void findAllShouldPreserveOrderWhenPositionLoadingIsDelayedForFirstItem() {
+        var orderId1 = 1L;
+
+        var orderId2 = 2L;
+
+        var orderId3 = 3L;
+
+        var order1 = OrderModel.create();
+
+        ReflectionTestUtils.setField(order1, "id", orderId1);
+
+        var order2 = OrderModel.create();
+
+        ReflectionTestUtils.setField(order2, "id", orderId2);
+
+        var order3 = OrderModel.create();
+
+        ReflectionTestUtils.setField(order3, "id", orderId3);
+
+        var orderItem1 = new OrderItemModel(orderId1, "Товар 1", 100L, 1);
+
+        var orderItem2 = new OrderItemModel(orderId2, "Товар 2", 200L, 1);
+
+        var orderItem3 = new OrderItemModel(orderId3, "Товар 3", 300L, 1);
+
+        var mockViewModel1 = Mockito.mock(OrderViewModel.class);
+
+        var mockViewModel2 = Mockito.mock(OrderViewModel.class);
+
+        var mockViewModel3 = Mockito.mock(OrderViewModel.class);
+
+        Mockito.when(orderRepository.findAllByOrderByIdAsc())
+                .thenReturn(Flux.just(order1, order2, order3));
+
+        Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId1))
+                .thenReturn(Flux.just(orderItem1).delayElements(Duration.ofMillis(100)));
+
+        Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId2))
+                .thenReturn(Flux.just(orderItem2));
+
+        Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId3))
+                .thenReturn(Flux.just(orderItem3));
+
+        Mockito.when(orderMapper.toViewModel(order1, List.of(orderItem1))).thenReturn(mockViewModel1);
+
+        Mockito.when(orderMapper.toViewModel(order2, List.of(orderItem2))).thenReturn(mockViewModel2);
+
+        Mockito.when(orderMapper.toViewModel(order3, List.of(orderItem3))).thenReturn(mockViewModel3);
+
+        StepVerifier.create(orderService.findAll())
+                .expectNext(mockViewModel1)
+                .expectNext(mockViewModel2)
+                .expectNext(mockViewModel3)
+                .verifyComplete();
+
+        Mockito.verify(orderRepository, Mockito.times(1)).findAllByOrderByIdAsc();
+
+        Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId1);
+
+        Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId2);
+
+        Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId3);
     }
 
     /**

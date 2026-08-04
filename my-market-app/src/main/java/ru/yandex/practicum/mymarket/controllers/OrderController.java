@@ -90,15 +90,27 @@ public class OrderController {
     /**
      * <summary>
      * Обрабатывает POST-запрос на проведение покупки содержимого текущей корзины пользователя.
+     * Анализирует результат выполнения покупки (успех, пустая корзина или отказ оплаты)
+     * и осуществляет соответствующий редирект.
      * </summary>
      * <return>
-     * @return Редирект на страницу созданного заказа в случае успеха, либо возврат на страницу корзины, если та пуста.
+     * @return Редирект на страницу созданного заказа при успехе, либо на страницу корзины с соответствующими параметрами.
      * </return>
      **/
     @PostMapping("/buy")
     public Mono<String> buy() {
         return purchaseService.buy()
-                .map(order -> "redirect:/orders/" + order.orderId() + "?newOrder=true")
+                .map(result -> {
+                    if (result.success()) {
+                        return "redirect:/orders/" + result.orderId() + "?newOrder=true";
+                    }
+
+                    if (result.emptyCart()) {
+                        return "redirect:/cart/items";
+                    }
+
+                    return "redirect:/cart/items?paymentError=true";
+                })
                 .defaultIfEmpty("redirect:/cart/items");
     }
 

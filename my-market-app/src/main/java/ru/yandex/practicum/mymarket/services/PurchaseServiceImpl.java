@@ -17,6 +17,8 @@ import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
 import ru.yandex.practicum.mymarket.viewmodels.CheckoutResultViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.OrderPaymentResultViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.PendingOrderDetailsViewModel;
+import ru.yandex.practicum.mymarket.viewmodels.PreparedCartItemViewModel;
 
 import java.util.List;
 
@@ -61,11 +63,11 @@ public class PurchaseServiceImpl implements PurchaseService {
 
     /**
      * <summary>
-     * Оформляет транзакцию покупки: выгружает все элементы из текущей корзины покупателя, переносит их
-     * в историческую структуру нового заказа с фиксацией цен, сохраняет заказ в БД и полностью очищает корзину.
+     * Оформляет транзакцию покупки: предварительно создает заказ в статусе PENDING, сохраняет его позиции,
+     * проводит списание средств через внешнюю платежную систему и обновляет статус заказа на PAID или PAYMENT_FAILED.
      * </summary>
      * <return>
-     * @return Уникальный идентификатор созданного заказа, либо Mono.empty(), если корзина покупателя оказалась пуста.
+     * @return Модель представления с результатом оформления заказа.
      * </return>
      **/
     @Transactional
@@ -77,94 +79,74 @@ public class PurchaseServiceImpl implements PurchaseService {
                         return Mono.just(CheckoutResultViewModel.empty());
                     }
 
-                    return calculateTotal(cartItems)
-                            .flatMap(paymentClientService::pay)
-                            .flatMap(payment -> finishCheckout(cartItems, payment));
+                    return prepareAndSavePendingOrder(cartItems)
+                            .flatMap(details -> paymentClientService.pay(details.totalAmount())
+                                    .flatMap(payment -> processPaymentResult(details.order(), cartItems, payment)));
                 });
     }
 
     /**
      * <summary>
-     * Завершает процесс оформления заказа по результатам транзакции оплаты: при успешном ответе
-     * сохраняет заказ в БД с очисткой корзины, а при отказе формирует отклоненный результат покупки.
+     * Валидирует товары из каталога, создает заказ в статусе PENDING, сохраняет его позиции в БД и высчитывает итоговую стоимость.
      * </summary>
-     * @param cartItems Список элементов корзины, подлежащих переносу в заказ.
-     * @param payment Результат проведения транзакции во внешнем платежном сервисе.
-     * <return>
-     * @return Моно-контейнер с итоговой моделью представления результата оформления покупки.
-     * </return>
      **/
-    private Mono<CheckoutResultViewModel> finishCheckout(List<CartItemModel> cartItems, OrderPaymentResultViewModel payment) {
+    private Mono<PendingOrderDetailsViewModel> prepareAndSavePendingOrder(final List<CartItemModel> cartItems) {
+        return Flux.fromIterable(cartItems)
+                .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
+                        .switchIfEmpty(Mono.error(
+                                new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in catalog")
+                        ))
+                        .map(item -> new PreparedCartItemViewModel(item, cartItem.getQuantity())))
+                .collectList()
+                .flatMap(preparedItems -> {
+                    long totalAmount = preparedItems.stream()
+                            .mapToLong(p -> p.item().getPrice() * p.quantity())
+                            .sum();
+
+                    OrderModel pendingOrder = OrderModel.create();
+
+                    return orderRepository.save(pendingOrder)
+                            .flatMap(savedOrder -> {
+                                List<OrderItemModel> orderItems = preparedItems.stream()
+                                        .map(p -> new OrderItemModel(
+                                                savedOrder.getId(),
+                                                p.item().getTitle(),
+                                                p.item().getPrice(),
+                                                p.quantity()
+                                        ))
+                                        .toList();
+
+                                return orderItemRepository.saveAll(orderItems)
+                                        .then()
+                                        .thenReturn(new PendingOrderDetailsViewModel(savedOrder, totalAmount));
+                            });
+                });
+    }
+
+    /**
+     * <summary>
+     * Обрабатывает результат проведения платежа во внешнем сервисе и обновляет статус заказа в БД.
+     * </summary>
+     **/
+    private Mono<CheckoutResultViewModel> processPaymentResult(
+            final OrderModel order,
+
+            final List<CartItemModel> cartItems,
+
+            final OrderPaymentResultViewModel payment) {
+
         if (!payment.success()) {
-            return Mono.just(CheckoutResultViewModel.rejected(payment.message()));
+            order.markAsPaymentFailed();
+
+            return orderRepository.save(order)
+                    .thenReturn(CheckoutResultViewModel.rejected(payment.message()));
         }
 
-        return saveOrder(cartItems).map(CheckoutResultViewModel::paid);
-    }
+        order.markAsPaid();
 
-    /**
-     * <summary>
-     * Вычисляет суммарную стоимость всех элементов корзины на основе актуальных цен товаров из каталога.
-     * </summary>
-     * @param cartItems Список элементов корзины для расчета итоговой суммы.
-     * <return>
-     * @return Моно-контейнер с рассчитанной общей стоимостью всех позиций в корзине.
-     * </return>
-     **/
-    private Mono<Long> calculateTotal(List<CartItemModel> cartItems) {
-        return Flux.fromIterable(cartItems)
-                .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
-                        .switchIfEmpty(Mono.error(
-                                new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in catalog")
-                        ))
-                        .map(item -> item.getPrice() * cartItem.getQuantity()))
-                .reduce(0L, Long::sum);
-    }
-
-    /**
-     * <summary>
-     * Преобразует плоский список элементов корзины в реактивный поток исторических позиций создаваемого заказа.
-     * </summary>
-     * @param orderId Уникальный идентификатор созданного родительского заказа.
-     * @param cartItems Список элементов корзины, подлежащих переносу в заказ.
-     * <return>
-     * @return Реактивный поток созданных исторических позиций заказа Flux.
-     * </return>
-     **/
-    private Flux<OrderItemModel> createOrderItems(
-            final long orderId,
-            final List<CartItemModel> cartItems) {
-
-        return Flux.fromIterable(cartItems)
-                .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
-                        .switchIfEmpty(Mono.error(
-                                new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found in catalog")
-                        ))
-                        .map(item -> new OrderItemModel(
-                                orderId,
-                                item.getTitle(),
-                                item.getPrice(),
-                                cartItem.getQuantity()
-                        )));
-    }
-
-    /**
-     * <summary>
-     * Атомарно сохраняет шапку нового заказа, генерирует и записывает его позиции,
-     * после чего производит полную очистку текущей корзины покупателя.
-     * </summary>
-     * @param cartItems Список элементов корзины для сохранения в составе заказа.
-     * <return>
-     * @return Моно-контейнер с уникальным идентификатором успешно сохраненного заказа.
-     * </return>
-     **/
-    private Mono<Long> saveOrder(final List<CartItemModel> cartItems) {
-        return orderRepository.save(OrderModel.create())
-                .flatMap(savedOrder -> createOrderItems(savedOrder.getId(), cartItems)
-                        .collectList()
-                        .flatMapMany(orderItemRepository::saveAll)
-                        .then(Mono.defer(() -> cartItemRepository.deleteAll(cartItems)))
-                        .thenReturn(savedOrder.getId()));
+        return orderRepository.save(order)
+                .then(cartItemRepository.deleteAll(cartItems))
+                .thenReturn(CheckoutResultViewModel.paid(order.getId()));
     }
 
     // endregion

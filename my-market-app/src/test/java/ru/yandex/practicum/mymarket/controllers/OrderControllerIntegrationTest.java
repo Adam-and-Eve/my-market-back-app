@@ -127,7 +127,21 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
     /**
      * <summary>
-     * Проверяет успешное оформление покупки через PurchaseService и перенаправление на страницу чека, если корзина не пуста.
+     * Проверяет, что при передаче некорректного типа идентификатора заказа в пути URl возвращается 400 Bad Request.
+     * </summary>
+     **/
+    @Test
+    public void getOrderShouldReturnBadRequestWhenIdIsNotNumeric() {
+        webTestClient.get().uri("/orders/not-a-number")
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(orderService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет успешное оформление покупки через PurchaseService и перенаправление на страницу заказа, если покупка оплачена.
      * </summary>
      **/
     @Test
@@ -146,11 +160,45 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
     /**
      * <summary>
-     * Проверяет возврат на страницу корзины, если при попытке покупки корзина покупателя оказалась пустой (Mono.empty()).
+     * Проверяет возврат на страницу корзины, если при попытке покупки корзина покупателя оказалась пустой.
      * </summary>
      **/
     @Test
     public void buyShouldRedirectBackToCartPageWhenCartIsEmpty() {
+        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(CheckoutResultViewModel.empty()));
+
+        webTestClient.post().uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/cart/items");
+
+        Mockito.verify(purchaseService, Mockito.times(1)).buy();
+    }
+
+    /**
+     * <summary>
+     * Проверяет перенаправление в корзину с параметром ошибки оплаты, если транзакция была отклонена платежным сервисом.
+     * </summary>
+     **/
+    @Test
+    public void buyShouldRedirectToCartWithPaymentErrorWhenRejected() {
+        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(CheckoutResultViewModel.rejected("Недостаточно средств")));
+
+        webTestClient.post().uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/cart/items?paymentError=true");
+
+        Mockito.verify(purchaseService, Mockito.times(1)).buy();
+    }
+
+    /**
+     * <summary>
+     * Проверяет редирект в корзину при возврате пустого Mono из сервиса покупки (проверка ветки defaultIfEmpty).
+     * </summary>
+     **/
+    @Test
+    public void buyShouldRedirectToCartWhenPurchaseServiceReturnsEmptyMono() {
         Mockito.when(purchaseService.buy()).thenReturn(Mono.empty());
 
         webTestClient.post().uri("/buy")

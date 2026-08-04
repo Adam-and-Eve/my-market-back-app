@@ -37,7 +37,7 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
 
     /**
      * <summary>
-     * Проверяет отображение страницы корзины. Так как WebTestClient работает на уровне HTTP-ответов,
+     * Проверяет отображение страницы корзины. так как WebTestClient работает на уровне HTTP-ответов,
      * мы проверяем успешный статус и наличие названий товаров в сгенерированном HTML-боди.
      * </summary>
      **/
@@ -101,9 +101,7 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-
         formData.add("id", String.valueOf(itemId));
-
         formData.add("action", "PLUS");
 
         webTestClient.post().uri("/cart/items")
@@ -128,9 +126,7 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
         Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.DELETE)).thenReturn(Mono.empty());
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-
         formData.add("id", String.valueOf(itemId));
-
         formData.add("action", "DELETE");
 
         webTestClient.post().uri("/cart/items")
@@ -141,6 +137,70 @@ public class CartControllerIntegrationTest extends MyMarketAppApplicationTests {
                 .expectHeader().valueEquals("Location", "/cart/items");
 
         Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.DELETE);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос без указания действия (action == null) возвращает ошибку 400 Bad Request
+     * и не приводит к вызову слоя сервисов.
+     * </summary>
+     **/
+    @Test
+    public void updateCartItemShouldReturnBadRequestWhenActionIsNull() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("id", "1");
+
+        webTestClient.post().uri("/cart/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос без указания идентификатора товара (id == null) возвращает ошибку 400 Bad Request
+     * и не приводит к вызову слоя сервисов.
+     * </summary>
+     **/
+    @Test
+    public void updateCartItemShouldReturnBadRequestWhenIdIsNull() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("action", "PLUS");
+
+        webTestClient.post().uri("/cart/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService);
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что POST-запрос с неизвестным типом действия возвращает ошибку 400 Bad Request
+     * и не приводит к вызову слоя сервисов.
+     * </summary>
+     **/
+    @Test
+    public void updateCartItemShouldReturnBadRequestWhenActionIsInvalid() {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", "1");
+
+        formData.add("action", "UNKNOWN_ACTION");
+
+        webTestClient.post().uri("/cart/items")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        Mockito.verifyNoInteractions(cartService);
     }
 
     // endregion
