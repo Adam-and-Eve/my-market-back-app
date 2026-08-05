@@ -7,7 +7,6 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
-import ru.yandex.practicum.mymarket.interfaces.PaymentClientService;
 import ru.yandex.practicum.mymarket.mappers.OrderMapper;
 import ru.yandex.practicum.mymarket.models.OrderModel;
 import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
@@ -69,7 +68,7 @@ public class OrderServiceImpl implements OrderService {
      **/
     @Transactional(readOnly = true)
     public Flux<OrderViewModel> findAll() {
-        return orderRepository.findAllByOrderByIdAsc()
+        return orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID)
                 .flatMapSequential(this::buildOrderViewModel);
     }
 

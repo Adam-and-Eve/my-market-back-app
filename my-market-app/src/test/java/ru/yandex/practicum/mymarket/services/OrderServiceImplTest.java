@@ -66,7 +66,7 @@ public class OrderServiceImplTest {
 
         var mockViewModel = Mockito.mock(OrderViewModel.class);
 
-        Mockito.when(orderRepository.findAllByOrderByIdAsc()).thenReturn(Flux.just(order));
+        Mockito.when(orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID)).thenReturn(Flux.just(order));
 
         Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId)).thenReturn(Flux.just(orderItem));
 
@@ -117,7 +117,7 @@ public class OrderServiceImplTest {
 
         var mockViewModel3 = Mockito.mock(OrderViewModel.class);
 
-        Mockito.when(orderRepository.findAllByOrderByIdAsc())
+        Mockito.when(orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID))
                 .thenReturn(Flux.just(order1, order2, order3));
 
         Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId1))
@@ -141,7 +141,7 @@ public class OrderServiceImplTest {
                 .expectNext(mockViewModel3)
                 .verifyComplete();
 
-        Mockito.verify(orderRepository, Mockito.times(1)).findAllByOrderByIdAsc();
+        Mockito.verify(orderRepository, Mockito.times(1)).findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID);
 
         Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId1);
 
@@ -157,7 +157,7 @@ public class OrderServiceImplTest {
      **/
     @Test
     void findAllShouldReturnEmptyListWhenNoOrdersExist() {
-        Mockito.when(orderRepository.findAllByOrderByIdAsc()).thenReturn(Flux.empty());
+        Mockito.when(orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID)).thenReturn(Flux.empty());
 
         StepVerifier.create(orderService.findAll().collectList())
                 .expectNextMatches(List::isEmpty)

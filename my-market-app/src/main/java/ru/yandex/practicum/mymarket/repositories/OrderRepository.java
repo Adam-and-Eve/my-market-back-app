@@ -23,5 +23,16 @@ public interface OrderRepository extends ReactiveCrudRepository<OrderModel, Long
      **/
     public Flux<OrderModel> findAllByOrderByIdAsc();
 
+    /**
+     * <summary>
+     * Извлекает заказы из базы данных по указанному статусу, сортируя их по возрастанию идентификатора.
+     * </summary>
+     * @param status Строковое представление статуса для фильтрации.
+     * <return>
+     * @return Список доменных сущностей заказов OrderModel.
+     * </return>
+     **/
+    public Flux<OrderModel> findAllByStatusOrderByIdAsc(String status);
+
     // endregion
 }

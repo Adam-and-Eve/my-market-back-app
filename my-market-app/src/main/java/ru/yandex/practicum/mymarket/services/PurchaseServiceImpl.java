@@ -3,6 +3,7 @@ package ru.yandex.practicum.mymarket.services;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -38,6 +39,7 @@ public class PurchaseServiceImpl implements PurchaseService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final PaymentClientService paymentClientService;
+    private final TransactionalOperator transactionalOperator;
 
     // endregion
 
@@ -48,13 +50,15 @@ public class PurchaseServiceImpl implements PurchaseService {
             final CartItemRepository cartItemRepository,
             final OrderRepository orderRepository,
             final OrderItemRepository orderItemRepository,
-            final PaymentClientService paymentClientService) {
+            final PaymentClientService paymentClientService,
+            final TransactionalOperator transactionalOperator) {
 
         this.itemRepository = itemRepository;
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.paymentClientService = paymentClientService;
+        this.transactionalOperator = transactionalOperator;
     }
 
     // endregion
@@ -63,14 +67,15 @@ public class PurchaseServiceImpl implements PurchaseService {
 
     /**
      * <summary>
-     * Оформляет транзакцию покупки: предварительно создает заказ в статусе PENDING, сохраняет его позиции,
-     * проводит списание средств через внешнюю платежную систему и обновляет статус заказа на PAID или PAYMENT_FAILED.
+     * Оформляет покупку в 3 этапа:
+     * 1. (Транзакция) Создает заказ PENDING и сохраняет позиции.
+     * 2. (Без транзакции) Проводит списание средств.
+     * 3. (Транзакция) Обновляет статус до PAID/PAYMENT_FAILED и очищает корзину.
      * </summary>
      * <return>
      * @return Модель представления с результатом оформления заказа.
      * </return>
      **/
-    @Transactional
     public Mono<CheckoutResultViewModel> buy() {
         return cartItemRepository.findAllByOrderByItemIdAsc()
                 .collectList()
@@ -87,7 +92,8 @@ public class PurchaseServiceImpl implements PurchaseService {
 
     /**
      * <summary>
-     * Валидирует товары из каталога, создает заказ в статусе PENDING, сохраняет его позиции в БД и высчитывает итоговую стоимость.
+     * Валидирует товары, создает заказ в статусе PENDING, сохраняет его позиции.
+     * Выполняется в рамках независимой транзакции.
      * </summary>
      **/
     private Mono<PendingOrderDetailsViewModel> prepareAndSavePendingOrder(final List<CartItemModel> cartItems) {
@@ -120,33 +126,35 @@ public class PurchaseServiceImpl implements PurchaseService {
                                         .then()
                                         .thenReturn(new PendingOrderDetailsViewModel(savedOrder, totalAmount));
                             });
-                });
+                })
+                .as(transactionalOperator::transactional);
     }
 
     /**
      * <summary>
-     * Обрабатывает результат проведения платежа во внешнем сервисе и обновляет статус заказа в БД.
+     * Обрабатывает результат проведения платежа и обновляет статус заказа.
+     * Выполняется в рамках независимой транзакции.
      * </summary>
      **/
     private Mono<CheckoutResultViewModel> processPaymentResult(
             final OrderModel order,
-
             final List<CartItemModel> cartItems,
-
             final OrderPaymentResultViewModel payment) {
+
+        Mono<CheckoutResultViewModel> resultMono;
 
         if (!payment.success()) {
             order.markAsPaymentFailed();
-
-            return orderRepository.save(order)
+            resultMono = orderRepository.save(order)
                     .thenReturn(CheckoutResultViewModel.rejected(payment.message()));
+        } else {
+            order.markAsPaid();
+            resultMono = orderRepository.save(order)
+                    .then(Mono.defer(() -> cartItemRepository.deleteAll(cartItems)))
+                    .thenReturn(CheckoutResultViewModel.paid(order.getId()));
         }
 
-        order.markAsPaid();
-
-        return orderRepository.save(order)
-                .then(cartItemRepository.deleteAll(cartItems))
-                .thenReturn(CheckoutResultViewModel.paid(order.getId()));
+        return resultMono.as(transactionalOperator::transactional);
     }
 
     // endregion

@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.models;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
@@ -40,7 +41,7 @@ public class OrderModel {
      * Дата и время создания заказа.
      **/
     @Column("created_at")
-    private LocalDateTime createdAt;
+    private final LocalDateTime createdAt;
 
     /**
      * Текущий статус заказа.
@@ -69,6 +70,21 @@ public class OrderModel {
 
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
         this.status = status != null ? status : STATUS_PENDING;
+    }
+
+    @PersistenceCreator
+    public OrderModel(
+            final Long id,
+            final String status,
+            final LocalDateTime createdAt
+    ){
+        if (id == null) {
+            throw new IllegalArgumentException("Идентификатор заказа не может быть null");
+        }
+
+        this.id = id;
+        this.status = status != null ? status : STATUS_PENDING;
+        this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
     }
 
     // endregion

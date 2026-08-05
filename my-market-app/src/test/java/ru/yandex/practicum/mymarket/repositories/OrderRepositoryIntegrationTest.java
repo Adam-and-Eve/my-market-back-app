@@ -21,6 +21,20 @@ public class OrderRepositoryIntegrationTest extends MyMarketAppApplicationTests 
 
     // endregion
 
+    // region Setup
+
+    /**
+     * <summary>
+     * Очищает состояние базы данных перед каждым тестом для обеспечения их независимости.
+     * </summary>
+     **/
+    @BeforeEach
+    void setUp() {
+        orderRepository.deleteAll().block();
+    }
+
+    // endregion
+
     // region Tests
 
     /**
@@ -79,6 +93,76 @@ public class OrderRepositoryIntegrationTest extends MyMarketAppApplicationTests 
         Assertions.assertEquals(savedSecond.getId(), sortedOrders.get(1).getId());
 
         Assertions.assertEquals(savedThird.getId(), sortedOrders.get(2).getId());
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что запрос по статусу возвращает пустой список, если заказов с таким статусом в БД нет.
+     * </summary>
+     **/
+    @Test
+    void findAllByStatusOrderByIdAscShouldReturnEmptyListWhenNoMatchingOrdersExist()
+    {
+        var pendingOrder = OrderModel.create();
+
+        orderRepository.save(pendingOrder).block();
+
+        var orders = orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID).collectList().block();
+
+        Assertions.assertNotNull(orders);
+
+        Assertions.assertTrue(orders.isEmpty());
+    }
+
+    /**
+     * <summary>
+     * Проверяет, что метод возвращает только те заказы, которые соответствуют переданному статусу.
+     * </summary>
+     **/
+    @Test
+    void findAllByStatusOrderByIdAscShouldReturnOnlyMatchingOrders()
+    {
+        var pendingOrder = OrderModel.create();
+
+        var paidOrder1 = OrderModel.create();
+
+        paidOrder1.markAsPaid();
+
+        var failedOrder = OrderModel.create();
+
+        failedOrder.markAsPaymentFailed();
+
+        var paidOrder2 = OrderModel.create();
+
+        paidOrder2.markAsPaid();
+
+        orderRepository.save(pendingOrder).block();
+
+        var savedPaid1 = orderRepository.save(paidOrder1).block();
+
+        orderRepository.save(failedOrder).block();
+
+        var savedPaid2 = orderRepository.save(paidOrder2).block();
+
+        var paidOrders = orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID).collectList().block();
+
+        Assertions.assertNotNull(paidOrders);
+
+        Assertions.assertEquals(2, paidOrders.size());
+
+        Assertions.assertTrue(paidOrders.get(0).getId() < paidOrders.get(1).getId());
+
+        assert savedPaid1 != null;
+
+        Assertions.assertEquals(savedPaid1.getId(), paidOrders.get(0).getId());
+
+        assert savedPaid2 != null;
+
+        Assertions.assertEquals(savedPaid2.getId(), paidOrders.get(1).getId());
+
+        for (var order : paidOrders) {
+            Assertions.assertEquals(OrderModel.STATUS_PAID, order.getStatus());
+        }
     }
 
     // endregion

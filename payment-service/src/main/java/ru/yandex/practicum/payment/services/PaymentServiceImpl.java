@@ -1,6 +1,8 @@
 package ru.yandex.practicum.payment.services;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.payment.configurations.properties.PaymentProperties;
 import ru.yandex.practicum.payment.interfaces.PaymentService;
@@ -54,6 +56,13 @@ public class PaymentServiceImpl implements PaymentService {
      * </return>
      **/
     public Mono<PaymentResultViewModel> pay(long amount) {
+        if (amount <= 0) {
+            return Mono.error(new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Сумма платежа должна быть больше нуля"
+            ));
+        }
+
         return Mono.fromSupplier(() -> {
             while (true) {
                 long currentBalance = balance.get();

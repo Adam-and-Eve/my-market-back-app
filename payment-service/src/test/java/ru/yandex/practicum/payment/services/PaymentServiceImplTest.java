@@ -5,6 +5,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.test.StepVerifier;
 import ru.yandex.practicum.payment.configurations.properties.PaymentProperties;
 
@@ -159,6 +161,56 @@ public class PaymentServiceImplTest {
 
         StepVerifier.create(paymentService.getBalance())
                 .expectNext(200L)
+                .verifyComplete();
+    }
+
+    /**
+     * <summary>
+     * Проверяет возврат ошибки HTTP 400 Bad Request при попытке списания нулевой суммы.
+     * </summary>
+     **/
+    @Test
+    void payShouldReturnBadRequestErrorWhenAmountIsZero() {
+        var initialBalance = 1000L;
+
+        Mockito.when(paymentProperties.initialBalance()).thenReturn(initialBalance);
+
+        var paymentService = new PaymentServiceImpl(paymentProperties);
+
+        StepVerifier.create(paymentService.pay(0L))
+                .expectErrorMatches(throwable ->
+                        throwable instanceof ResponseStatusException &&
+                                ((ResponseStatusException) throwable).getStatusCode() == HttpStatus.BAD_REQUEST
+                )
+                .verify();
+
+        StepVerifier.create(paymentService.getBalance())
+                .expectNext(initialBalance)
+                .verifyComplete();
+    }
+
+    /**
+     * <summary>
+     * Проверяет возврат ошибки HTTP 400 Bad Request при попытке списания отрицательной суммы.
+     * </summary>
+     **/
+    @Test
+    void payShouldReturnBadRequestErrorWhenAmountIsNegative() {
+        var initialBalance = 1000L;
+
+        Mockito.when(paymentProperties.initialBalance()).thenReturn(initialBalance);
+
+        var paymentService = new PaymentServiceImpl(paymentProperties);
+
+        StepVerifier.create(paymentService.pay(-100L))
+                .expectErrorMatches(throwable ->
+                        throwable instanceof ResponseStatusException &&
+                                ((ResponseStatusException) throwable).getStatusCode() == HttpStatus.BAD_REQUEST
+                )
+                .verify();
+
+        StepVerifier.create(paymentService.getBalance())
+                .expectNext(initialBalance)
                 .verifyComplete();
     }
 

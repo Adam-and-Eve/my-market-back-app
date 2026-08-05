@@ -2,8 +2,10 @@ package ru.yandex.practicum.payment.controllers;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.payment.generated.model.PaymentRequest;
 import ru.yandex.practicum.payment.PaymentServiceApplicationTests;
@@ -107,6 +109,52 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
                 .jsonPath("$.message").isEqualTo(errorMessage);
 
         Mockito.verify(paymentService, Mockito.times(1)).pay(payAmount);
+    }
+
+    /**
+     * <summary>
+     * Проверяет возврат статуса HTTP 400 Bad Request при передаче нулевой суммы платежа.
+     * </summary>
+     **/
+    @Test
+    public void payShouldReturn400BadRequestWhenAmountIsZero() {
+        var payAmount = 0L;
+
+        var errorMessage = "Сумма платежа должна быть больше нуля";
+
+        Mockito.when(paymentService.pay(Mockito.anyLong()))
+                .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)));
+
+        var requestBody = new PaymentRequest(payAmount);
+
+        webTestClient.post().uri("/payments/pay")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .exchange()
+                .expectStatus().isBadRequest();
+    }
+
+    /**
+     * <summary>
+     * Проверяет возврат статуса HTTP 400 Bad Request при передаче отрицательной суммы платежа.
+     * </summary>
+     **/
+    @Test
+    public void payShouldReturn400BadRequestWhenAmountIsNegative() {
+        var payAmount = -100L;
+
+        var errorMessage = "Сумма платежа должна быть больше нуля";
+
+        Mockito.when(paymentService.pay(Mockito.anyLong()))
+                .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)));
+
+        var requestBody = new PaymentRequest(payAmount);
+
+        webTestClient.post().uri("/payments/pay")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(requestBody)
+                .exchange()
+                .expectStatus().isBadRequest();
     }
 
     // endregion
