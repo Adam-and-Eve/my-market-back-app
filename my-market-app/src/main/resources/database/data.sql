@@ -5,3 +5,9 @@ MERGE INTO items (id, title, description, img_path, price) KEY (id) VALUES
     (4, 'Процессор Intel Core Ultra 9 285K', 'Флагманский десктопный процессор архитектуры Arrow Lake. 24 ядра (8 P-ядер и 16 E-ядер), базовая частота 3.7 ГГц, разблокированный множитель.', 'images/intel_u9.png', 65000);
 
 ALTER TABLE items ALTER COLUMN id RESTART WITH 5;
+
+MERGE INTO users (id, username, enabled) KEY (id) VALUES
+    (1, 'admin', TRUE),
+    (2, 'user', TRUE)
+
+ALTER TABLE users ALTER COLUMN id RESTART WITH 3;
