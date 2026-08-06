@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authentication.logout.ServerLogoutSuccessHandler;
+import org.thymeleaf.extras.springsecurity6.dialect.SpringSecurityDialect;
 import ru.yandex.practicum.mymarket.configurations.properties.KeycloakProperties;
 
 import java.util.HashMap;
@@ -54,6 +55,11 @@ public class SecurityConfiguration {
 
     // region Methods
 
+    @Bean
+    public SpringSecurityDialect springSecurityDialect() {
+        return new SpringSecurityDialect();
+    }
+
     /**
      * <summary>
      * Настраивает реактивную цепочку фильтров безопасности, правила доступа к эндпоинтам, OIDC-вход и логаут.
@@ -68,6 +74,7 @@ public class SecurityConfiguration {
             ServerHttpSecurity http) {
         return http
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .anonymous(Customizer.withDefaults())
                 .authorizeExchange(exchanges -> exchanges
                         .pathMatchers("/templates/**","/static/images/**").permitAll()
                         .pathMatchers(HttpMethod.POST, "/items", "/items/*").authenticated()
