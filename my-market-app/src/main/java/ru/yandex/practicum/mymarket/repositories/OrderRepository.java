@@ -17,22 +17,24 @@ public interface OrderRepository extends ReactiveCrudRepository<OrderModel, Long
      * <summary>
      * Извлекает все заказы из базы данных, сортируя их по возрастанию идентификатора)
      * </summary>
+     * @param userId Идентификатор покупателя.
      * <return>
      * @return Список доменных сущностей заказов OrderModel.
      * </return>
      **/
-    public Flux<OrderModel> findAllByOrderByIdAsc();
+    public Flux<OrderModel> findAllByUserIdOrderByIdAsc(final long userId);
 
     /**
      * <summary>
      * Извлекает заказы из базы данных по указанному статусу, сортируя их по возрастанию идентификатора.
      * </summary>
+     * @param userId Идентификатор покупателя.
      * @param status Строковое представление статуса для фильтрации.
      * <return>
      * @return Список доменных сущностей заказов OrderModel.
      * </return>
      **/
-    public Flux<OrderModel> findAllByStatusOrderByIdAsc(String status);
+    public Flux<OrderModel> findAllByUserIdAndStatusOrderByIdAsc(final long userId, final String status);
 
     // endregion
 }

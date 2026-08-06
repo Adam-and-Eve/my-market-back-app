@@ -8,6 +8,6 @@ ALTER TABLE items ALTER COLUMN id RESTART WITH 5;
 
 MERGE INTO users (id, username, enabled) KEY (id) VALUES
     (1, 'admin', TRUE),
-    (2, 'user', TRUE)
+    (2, 'user', TRUE);
 
 ALTER TABLE users ALTER COLUMN id RESTART WITH 3;
