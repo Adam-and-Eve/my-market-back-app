@@ -1,28 +1,35 @@
 # my-market-back-app
 
-Мультимодульный бэкенд приложения **«Витрина интернет-магазина»** с неблокирующим кешированием в Redis и интеграцией с сервисом платежей через OpenAPI.
+Мультимодульный бэкенд приложения **«Витрина интернет-магазина»** с неблокирующим кешированием товаров в Redis, интеграцией с сервисом платежей через OpenAPI и OAuth2/OIDC аутентификацией через Keycloak.
 
 ---
 
 ## 🚀 О проекте
 
-Проект представляет собой реактивное мультимодульное решение, состоящее из основного веб-приложения интернет-магазина и отдельного RESTful-сервиса платежей.
+Проект представляет собой реактивное мультимодульное решение:
+
+- Основное веб-приложение интернет-магазина;
+- Отдельный RESTful-сервис платежей;
+- Redis для кеширования данных товаров;
+- Keycloak для управления пользователями и OAuth2/OIDC аутентификации.
 
 ---
 
 ## 🛠 Технологический стек
 
 - **Язык:** Java 21
-- **Фреймворк:** Spring Boot 4+ (Spring WebFlux, Spring Data R2DBC, Spring Data Redis Reactive, Thymeleaf)
-- **Реактивный движок:** Project Reactor (`Mono`, `Flux`)
+- **Фреймворк:** Spring Boot 4+
+- **Web:** Spring WebFlux, Thymeleaf
+- **Реактивный стек:** Project Reactor (`Mono`, `Flux`)
+- **Доступ к данным:** Spring Data R2DBC
+- **Кеширование:** Spring Data Redis Reactive
+- **Безопасность:** Spring Security OAuth2 Client, OAuth2 Resource Server, Keycloak
+- **API-контракт:** OpenAPI 3 + OpenAPI Generator
+- **База данных:** H2 Database (R2DBC)
 - **Сборка:** Maven
-- **Оркестрация и деплой** Docker, Docker Compose, Netty Embedded Server
-- **Кеширование** Redis
-- **Контракты и API** OpenAPI 3.0 Spec + OpenAPI Generator Maven Plugin
-- **База данных:** H2 Database (In-Memory хранилище с асинхронным R2DBC-драйвером)
-- **Доступ к данным:** Spring Data R2DBC (полностью неблокирующее взаимодействие с БД)
-- **Деплой:** Executable JAR (Многоэтапная Docker-контейнеризация)
-- **Тестирование:** JUnit 5, Spring Boot Test, WebTestClient (для реактивного тестирования эндпоинтов), Reactor Test (`StepVerifier`)
+- **Контейнеризация:** Docker, Docker Compose
+- **Сервер:** Embedded Netty
+- **Тестирование:** JUnit 5, Spring Boot Test, WebTestClient, Reactor Test
 
 ---
 
@@ -52,6 +59,20 @@ spring.data.redis.repositories.enabled=false
 app.items-cache.ttl=2m
 app.payment-service.base-url=http://localhost:8081
 
+app.security.keycloak.logout-uri=${KEYCLOAK_LOGOUT_URI:http://localhost:8082/realms/my-market/protocol/openid-connect/logout}
+
+spring.security.oauth2.client.registration.keycloak.provider=keycloak
+spring.security.oauth2.client.registration.keycloak.client-id=${KEYCLOAK_LOGIN_CLIENT_ID}
+spring.security.oauth2.client.registration.keycloak.client-secret=${KEYCLOAK_LOGIN_CLIENT_SECRET}
+spring.security.oauth2.client.registration.keycloak.authorization-grant-type=authorization_code
+spring.security.oauth2.client.registration.keycloak.redirect-uri={baseUrl}/login/oauth2/code/{registrationId}
+spring.security.oauth2.client.registration.keycloak.scope[0]=openid
+
+spring.security.oauth2.client.provider.keycloak.authorization-uri=${KEYCLOAK_AUTHORIZATION_URI:http://localhost:8082/realms/my-market/protocol/openid-connect/auth}
+spring.security.oauth2.client.provider.keycloak.token-uri=${KEYCLOAK_TOKEN_URI:http://localhost:8082/realms/my-market/protocol/openid-connect/token}
+spring.security.oauth2.client.provider.keycloak.jwk-set-uri=${KEYCLOAK_JWK_SET_URI:http://localhost:8082/realms/my-market/protocol/openid-connect/certs}
+spring.security.oauth2.client.provider.keycloak.user-name-attribute=preferred_username
+
 server.port=8080
 ```
 
@@ -62,8 +83,39 @@ spring.application.name=payment-service
 
 payment.initial-balance=1000000
 
+spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:8082/realms/my-market
+spring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://localhost:8082/realms/my-market/protocol/openid-connect/certs
+
 server.port=8081
 ```
+## 🔐 Аутентификация
+
+Пользователи приложения находятся в Keycloak.
+
+Приложение использует OAuth2/OIDC:
+
+- пользователь входит через Keycloak;
+- после успешной авторизации приложение получает JWT;
+- локально хранится только профиль пользователя, необходимый приложению.
+
+Пароли и учетные данные пользователей находятся в Keycloak.
+
+# 💳 Интеграция платежей
+
+Обмен между market-app и payment-service выполняется через JSON API.
+
+OpenAPI спецификация используется для генерации:
+
+- реактивного WebClient-клиента в market-app;
+- реактивных серверных интерфейсов в payment-service.
+
+Платежный сервис предоставляет:
+
+- получение текущего баланса;
+- выполнение платежа.
+
+При успешной оплате создаётся заказ.
+При недостаточном балансе или недоступности сервиса оформление заказа невозможно.
 
 ## 🐳 Запуск через Docker Compose
 
