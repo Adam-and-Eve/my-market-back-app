@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at  TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status      VARCHAR(50)     NOT NULL DEFAULT 'CREATED',
 
-    CONSTRAINT fk_orders_user_id FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT fk_orders_user_id FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
 CREATE TABLE IF NOT EXISTS order_items (

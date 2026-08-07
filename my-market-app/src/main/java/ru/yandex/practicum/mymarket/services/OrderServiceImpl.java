@@ -11,6 +11,7 @@ import ru.yandex.practicum.mymarket.mappers.OrderMapper;
 import ru.yandex.practicum.mymarket.models.OrderModel;
 import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
+import ru.yandex.practicum.mymarket.repositories.UserRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
 /**
@@ -39,6 +40,11 @@ public class OrderServiceImpl implements OrderService {
      **/
     private final OrderMapper orderMapper;
 
+    /**
+     * Репозиторий для управления персистентным состоянием учетных записей пользователей.
+     **/
+    private final UserRepository userRepository;
+
     // endregion
 
     // region Constructors
@@ -46,11 +52,13 @@ public class OrderServiceImpl implements OrderService {
     public OrderServiceImpl(
             final OrderRepository orderRepository,
             final OrderItemRepository orderItemRepository,
-            final OrderMapper orderMapper) {
+            final OrderMapper orderMapper,
+            final UserRepository userRepository) {
 
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.orderMapper = orderMapper;
+        this.userRepository = userRepository;
     }
 
     // endregion
@@ -59,23 +67,26 @@ public class OrderServiceImpl implements OrderService {
 
     /**
      * <summary>
-     * Возвращает список всех оформленных заказов, отсортированных по возрастанию идентификатора, с маппингом во View Model.
-     * Работает в режиме оптимизации транзакции "только для чтения".
+     * Возвращает список всех оформленных заказов пользователя по его имени, отсортированных по возрастанию идентификатора.
      * </summary>
+     * @param username Имя пользователя для поиска заказов.
      * <return>
-     * @return Список моделей представления заказов List.
+     * @return Реактивный поток Flux с моделями представления заказов OrderViewModel.
      * </return>
      **/
     @Transactional(readOnly = true)
-    public Flux<OrderViewModel> findAll() {
-        return orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID)
+    @Override
+    public Flux<OrderViewModel> findAll(final String username) {
+        return userRepository.findByUsername(username)
+                .flatMapMany(user -> orderRepository.findAllByUserIdAndStatusOrderByIdAsc(user.getId(), OrderModel.STATUS_PAID))
                 .flatMapSequential(this::buildOrderViewModel);
     }
 
     /**
      * <summary>
-     * Выполняет поиск оформленного заказа по его уникальному идентификатору с последующим маппингом во View Model.
+     * Выполняет поиск оформленного заказа по его уникальному идентификатору и имени пользователя.
      * </summary>
+     * @param username Имя покупателя.
      * @param id Уникальный идентификатор искомого заказа.
      * <return>
      * @return Сконвертированная модель представления заказа OrderViewModel.
@@ -84,9 +95,9 @@ public class OrderServiceImpl implements OrderService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public Mono<OrderViewModel> findById(final long id) {
-        return orderRepository
-                .findById(id)
+    public Mono<OrderViewModel> findById(final String username, final long id) {
+        return userRepository.findByUsername(username)
+                .flatMap(user -> orderRepository.findByIdAndUserId(id, user.getId()))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found.")))
                 .flatMap(this::buildOrderViewModel);
     }

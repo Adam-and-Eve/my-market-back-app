@@ -2,7 +2,10 @@ package ru.yandex.practicum.mymarket.helpers;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
+import ru.yandex.practicum.mymarket.models.ItemModel;
 import ru.yandex.practicum.mymarket.models.ItemSortEnumModel;
+
+import java.util.Comparator;
 
 /**
  * <summary>
@@ -99,6 +102,23 @@ public class CatalogHelper {
             case NO -> Sort.unsorted();
             case ALPHA -> Sort.by(Sort.Direction.ASC, "title");
             case PRICE -> Sort.by(Sort.Direction.ASC, "price");
+        };
+    }
+
+    /**
+     * <summary>
+     * Преобразует внутреннюю модель стратегии сортировки в Comparator для сортировки списка товаров в памяти Java.
+     * </summary>
+     * @param sort Выбранный элемент перечисления стратегии сортировки.
+     * <return>
+     * @return Объект Comparator для выполнения сортировки коллекций.
+     * </return>
+     **/
+    public Comparator<ItemModel> resolveComparator(final ItemSortEnumModel sort) {
+        return switch (sort) {
+            case ALPHA -> Comparator.comparing(ItemModel::getTitle, String.CASE_INSENSITIVE_ORDER);
+            case PRICE -> Comparator.comparingLong(ItemModel::getPrice);
+            case NO -> (item1, item2) -> 0;
         };
     }
 

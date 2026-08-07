@@ -1,12 +1,14 @@
 services:
   keycloak:
+    profiles:
+      - infra
+      - full
     image: quay.io/keycloak/keycloak:24.0
     command: start-dev --import-realm
     container_name: my-market-keycloak
     environment:
-      KC_HEALTH_ENABLED: "true"
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8082
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
     volumes:
@@ -21,6 +23,9 @@ services:
       - "8082:8080"
 
   redis:
+    profiles:
+      - infra
+      - full
     image: redis:7-alpine
     container_name: my-market-redis
     healthcheck:
@@ -32,12 +37,16 @@ services:
       - "6379:6379"
 
   payment-service:
+    profiles:
+      - full
     build:
       context: .
       dockerfile: payment-service/Dockerfile
     container_name: payment-service
     environment:
       SERVER_PORT: 8081
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:8082/realms/my-market
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/certs
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health || exit 1"]
       interval: 5s
@@ -48,6 +57,8 @@ services:
       - "8081:8081"
 
   market-app:
+    profiles:
+      - full
     build:
       context: .
       dockerfile: my-market-app/Dockerfile
@@ -70,7 +81,6 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       APP_PAYMENT_SERVICE_BASE_URL: http://payment-service:8081
-      PAYMENT_SERVICE_CLIENT_SECRET: dev-payment-secret
       KEYCLOAK_LOGIN_CLIENT_SECRET: dev-login-secret
       KEYCLOAK_AUTHORIZATION_URI: http://localhost:8082/realms/my-market/protocol/openid-connect/auth
       KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/token

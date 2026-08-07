@@ -4,6 +4,8 @@ import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.models.UserModel;
 
+import java.util.Optional;
+
 /**
  * <summary>
  * Интерфейс репозитория для выполнения операций CRUD и управления персистентным состоянием доменных моделей покупателей UserModel.

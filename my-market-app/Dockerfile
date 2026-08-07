@@ -9,11 +9,11 @@ COPY my-market-app/pom.xml ./my-market-app/
 
 COPY api/ ./api/
 
-RUN mvn compile -DskipTests -B -ntp
+RUN mvn compile -Dmaven.test.skip=true -B -ntp
 
 COPY my-market-app/src ./my-market-app/src/
 
-RUN mvn -pl my-market-app package -DskipTests -B -ntp
+RUN mvn -pl my-market-app package -Dmaven.test.skip=true -B -ntp
 
 FROM eclipse-temurin:21-jre-noble
 WORKDIR /app

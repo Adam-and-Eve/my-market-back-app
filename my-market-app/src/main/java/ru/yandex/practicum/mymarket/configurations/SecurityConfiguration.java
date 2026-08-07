@@ -76,7 +76,7 @@ public class SecurityConfiguration {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .anonymous(Customizer.withDefaults())
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/templates/**","/static/images/**").permitAll()
+                        .pathMatchers("/templates/**","/images/**").permitAll()
                         .pathMatchers(HttpMethod.POST, "/items", "/items/*").authenticated()
                         .pathMatchers("/cart/**", "/orders/**", "/buy", "/logout").authenticated()
                         .pathMatchers(HttpMethod.GET, "/", "/items", "/items/*").permitAll()

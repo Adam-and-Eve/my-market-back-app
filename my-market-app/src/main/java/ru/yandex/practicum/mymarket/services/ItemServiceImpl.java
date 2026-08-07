@@ -79,13 +79,14 @@ public class ItemServiceImpl implements ItemService {
      * <summary>
      * Извлекает полный нефильтрованный список всех товаров из базы данных.
      * </summary>
+     * @param username Имя пользователя.
      * <return>
      * @return Список доменных моделей всех существующих товаров.
      * </return>
      **/
     @Transactional(readOnly = true)
     @Override
-    public Flux<ItemModel> findAll() {
+    public Flux<ItemModel> findAll(final String username) {
         return itemCacheService.findAll(itemRepository.findAll());
     }
 
@@ -93,6 +94,7 @@ public class ItemServiceImpl implements ItemService {
      * <summary>
      * Получает View-модель товара по его уникальному идентификатору с обогащением данными из корзины.
      * </summary>
+     * @param username Имя пользователя.
      * @param id Уникальный идентификатор товара.
      * <return>
      * @return Модель представления товара с актуальным количеством в корзине текущего пользователя.
@@ -101,12 +103,11 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public Mono<ItemViewModel> findById(final long id) {
+    public Mono<ItemViewModel> findById(final String username, final long id) {
         return itemCacheService.findById(id, itemRepository.findById(id))
-                .flatMap(item -> cartService.findCountForItem(item.getId())
+                .flatMap(item -> cartService.findCountForItem(username, item.getId())
                         .map(count -> itemMapper.toViewModel(item, count)))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
-
     }
 
     /**
@@ -114,6 +115,7 @@ public class ItemServiceImpl implements ItemService {
      * Находит чистую доменную модель товара по его идентификатору.
      * Используется для внутренних нужд других компонентов и междоменного взаимодействия.
      * </summary>
+     * @param username Имя пользователя.
      * @param id Уникальный идентификатор товара.
      * <return>
      * @return Доменная модель товара ItemModel.
@@ -122,7 +124,7 @@ public class ItemServiceImpl implements ItemService {
      **/
     @Transactional(readOnly = true)
     @Override
-    public Mono<ItemModel> findModelById(final long id) {
+    public Mono<ItemModel> findModelById(final String username, final long id) {
         return itemCacheService.findById(id, itemRepository.findById(id))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
     }
@@ -132,6 +134,7 @@ public class ItemServiceImpl implements ItemService {
      * Выполняет построение страницы каталога товаров на основе переданных фильтров, правил сортировки и пагинации.
      * Запросы на фильтрацию, сортировку и выборку нужного окна данных делегируются на уровень базы данных.
      * </summary>
+     * @param username Имя пользователя.
      * @param search Необработанная поисковая строка для фильтрации по названию или описанию.
      * @param sort Строковое имя стратегии сортировки элементов.
      * @param pageNumber Запрашиваемый номер страницы каталога.
@@ -143,45 +146,43 @@ public class ItemServiceImpl implements ItemService {
     @Transactional(readOnly = true)
     @Override
     public Mono<CatalogPageViewModel> findCatalog(
+            final String username,
             final String search,
             final String sort,
             final Integer pageNumber,
             final Integer pageSize
     ) {
         var normalizedSearch = catalogHelper.normalizeSearch(search);
-
         var itemSort = ItemSortEnumModel.from(sort);
-
         var normalizedPageNumber = catalogHelper.normalizePageNumber(pageNumber);
-
         var normalizedPageSize = catalogHelper.normalizePageSize(pageSize);
 
+        var cachedItems = itemCacheService.findAll(itemRepository.findAll());
 
-        var springSort = catalogHelper.resolveSort(itemSort);
+        var filteredItems = cachedItems
+                .filter(item -> matchesSearch(item, normalizedSearch));
 
-        var pageable = PageRequest.of(normalizedPageNumber - 1, normalizedPageSize, springSort);
+        var totalCountMono = filteredItems.count();
 
-        var itemsMono = itemRepository
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch, pageable)
-                .collectList();
-
-        var countMono = itemRepository
-                .countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch);
-
-        return Mono.zip(itemsMono, countMono)
-                .flatMap(tuple -> {
-                    var pageItems = tuple.getT1();
-                    var totalCount = tuple.getT2();
-
-                    return buildCatalogPage(
-                            pageItems,
-                            totalCount,
-                            normalizedSearch,
-                            itemSort,
-                            normalizedPageNumber,
-                            normalizedPageSize
-                    );
+        var pageItemsMono = filteredItems
+                .collectList()
+                .map(list -> {
+                    list.sort(catalogHelper.resolveComparator(itemSort));
+                    int fromIndex = Math.min((normalizedPageNumber - 1) * normalizedPageSize, list.size());
+                    int toIndex = Math.min(fromIndex + normalizedPageSize, list.size());
+                    return list.subList(fromIndex, toIndex);
                 });
+
+        return Mono.zip(pageItemsMono, totalCountMono)
+                .flatMap(tuple -> buildCatalogPage(
+                        username,
+                        tuple.getT1(),
+                        tuple.getT2(),
+                        normalizedSearch,
+                        itemSort,
+                        normalizedPageNumber,
+                        normalizedPageSize
+                ));
     }
 
     /**
@@ -189,6 +190,7 @@ public class ItemServiceImpl implements ItemService {
      * Обогащает отфильтрованную страницу товаров данными о количестве в корзине текущего пользователя
      * и собирает итоговую View-модель страницы каталога.
      * </summary>
+     * @param username Имя пользователя.
      * @param pageItems Список моделей товаров, полученный из БД для текущей страницы.
      * @param totalCount Общее количество товаров в БД, удовлетворяющих критериям поиска.
      * @param search Нормализованная поисковая строка, использованная при фильтрации.
@@ -200,20 +202,19 @@ public class ItemServiceImpl implements ItemService {
      * </return>
      **/
     private Mono<CatalogPageViewModel> buildCatalogPage(
+            final String username,
             final List<ItemModel> pageItems,
             final long totalCount,
             final String search,
             final ItemSortEnumModel sort,
             final int pageNumber,
             final int pageSize
-    ){
+    ) {
         var hasPrevious = pageNumber > 1;
-
         var hasNext = ((long) pageNumber * pageSize) < totalCount;
-
         var itemIds = pageItems.stream().map(ItemModel::getId).toList();
 
-        return cartService.findCountsForItems(itemIds)
+        return cartService.findCountsForItems(username, itemIds)
                 .map(counts -> new CatalogPageViewModel(
                         itemMapper.toRows(pageItems, counts),
                         search,
@@ -225,6 +226,30 @@ public class ItemServiceImpl implements ItemService {
                                 hasNext
                         )
                 ));
+    }
+
+    /**
+     * <summary>
+     * Проверяет соответствие сущности товара поисковому запросу по его названию или описанию без учета регистра.
+     * </summary>
+     * @param item Доменная модель товара для проверки.
+     * @param search Строка поискового запроса.
+     * <return>
+     * @return true, если поисковый запрос пуст или совпадает с частью названия либо описания товара; иначе false.
+     * </return>
+     **/
+    private boolean matchesSearch(ItemModel item, String search) {
+        if (search == null || search.isBlank()) {
+            return true;
+        }
+
+        var lowerSearch = search.toLowerCase();
+
+        var titleMatches = item.getTitle() != null && item.getTitle().toLowerCase().contains(lowerSearch);
+
+        var descMatches = item.getDescription() != null && item.getDescription().toLowerCase().contains(lowerSearch);
+
+        return titleMatches || descMatches;
     }
 
     // endregion

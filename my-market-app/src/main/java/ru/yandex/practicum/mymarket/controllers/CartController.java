@@ -12,6 +12,8 @@ import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.models.CartActionEnumModel;
 import ru.yandex.practicum.mymarket.viewmodels.CartItemFormViewModel;
 
+import java.security.Principal;
+
 /**
  * <summary>
  * Веб-контроллер для обработки запросов, связанных с просмотром содержимого корзины покупателя.
@@ -41,17 +43,20 @@ public class CartController {
 
     /**
      * <summary>
-     * Обрабатывает GET-запросы к эндпоинту "/cart/items" для формирования страницы корзины покупателя.
-     * Запрашивает данные агрегации у сервиса и передает коллекцию элементов и общую сумму в контекст отображения.
+     * Обрабатывает GET-запросы к эндпоинту "/cart/items" для формирования страницы корзины.
      * </summary>
+     * @param principal Объект текущего аутентифицированного пользователя Spring Security.
      * @param model Контекст модели Spring MVC для передачи данных в HTML-шаблон.
      * <return>
-     * @return Логическое имя HTML-шаблона ("cart").
+     * @return Реактивный контейнер Mono с логическим именем HTML-шаблона ("cart").
      * </return>
      **/
     @GetMapping("/cart/items")
-    public Mono<String> getCart(final Model model) {
-        return cartService.findCart().doOnNext(cartPage -> {
+    public Mono<String> getCart(
+            final Principal principal,
+            final Model model) {
+
+        return cartService.findCart(username(principal)).doOnNext(cartPage -> {
             model.addAttribute("items", cartPage.items());
             model.addAttribute("total", cartPage.total());
             model.addAttribute("paymentAvailable", cartPage.paymentAvailable());
@@ -63,21 +68,36 @@ public class CartController {
 
     /**
      * <summary>
-     * Обрабатывает POST-запросы со страницы корзины для изменения количества выбранного товара.
+     * Обрабатывает POST-запросы со страницы корзины для изменения количества позиций товара или их удаления.
      * </summary>
-     * @param form Данные с формы HTML-шаблона.
+     * @param principal Объект текущего аутентифицированного пользователя Spring Security.
+     * @param form Валидированная модель представления формы изменения состава корзины.
      * @param model Контекст модели Spring MVC для передачи данных в HTML-шаблон.
      * <return>
-     * @return Строка перенаправления (redirect) на GET-метод отображения корзины.
+     * @return Реактивный контейнер Mono со строкой перенаправления (redirect) на страницу корзины.
      * </return>
      **/
     @PostMapping("/cart/items")
     public Mono<String> updateCartItem(
-            @Valid @ModelAttribute CartItemFormViewModel form,
-            Model model){
+            final Principal principal,
+            @Valid @ModelAttribute final CartItemFormViewModel form,
+            final Model model){
 
-        return cartService.updateItemCount(form.getId(), form.getAction())
+        return cartService.updateItemCount(username(principal), form.getId(), form.getAction())
                 .thenReturn("redirect:/cart/items");
+    }
+
+    /**
+     * <summary>
+     * Извлекает имя пользователя из объекта аутентификации Principal.
+     * </summary>
+     * @param principal Объект текущего аутентифицированного пользователя.
+     * <return>
+     * @return Имя пользователя или null, если объект Principal отсутствует.
+     * </return>
+     **/
+    private String username(final Principal principal) {
+        return principal == null ? null : principal.getName();
     }
 
     // endregion
