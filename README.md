@@ -130,19 +130,19 @@ docker compose --profile full up -d
 Проверка статуса запущенных контейнеров:
 
 ```bash
-docker-compose ps
+docker compose --profile full ps
 ```
 
 Просмотр логов:
 
 ```bash
-docker-compose logs -f
+docker compose --profile full logs -f
 ```
 
 Остановка и удаление контейнеров:
 
 ```bash
-docker-compose down
+docker compose --profile full down
 ```
 
 ---
