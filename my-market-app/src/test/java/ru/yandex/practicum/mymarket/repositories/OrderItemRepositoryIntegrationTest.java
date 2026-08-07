@@ -27,6 +27,17 @@ public class OrderItemRepositoryIntegrationTest extends MyMarketAppApplicationTe
 
     // endregion
 
+    // region Setup
+
+    @BeforeEach
+    void clear() {
+        orderItemRepository.deleteAll().block();
+
+        orderRepository.deleteAll().block();
+    }
+
+    // endregion
+
     // region Tests
 
     /**
@@ -37,7 +48,9 @@ public class OrderItemRepositoryIntegrationTest extends MyMarketAppApplicationTe
     @Test
     void findAllByOrderIdOrderByIdAscShouldReturnItemsOrderedByIdWhenOrderExists()
     {
-        var order = OrderModel.create();
+        var userId = 1L;
+
+        var order = OrderModel.create(userId);
 
         var savedOrder = orderRepository.save(order).block();
 

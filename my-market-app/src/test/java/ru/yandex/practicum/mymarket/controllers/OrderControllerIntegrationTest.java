@@ -3,6 +3,8 @@ package ru.yandex.practicum.mymarket.controllers;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -22,6 +24,12 @@ import java.util.List;
  **/
 public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests {
 
+    // region Constants
+
+    private static final String TEST_USERNAME = "user";
+
+    // endregion
+
     // region Fields
 
     @MockitoBean
@@ -32,14 +40,15 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
     // endregion
 
-    // region Tests
+    // region Tests for GET /orders
 
     /**
      * <summary>
-     * Проверяет отображение страницы списка всех оформленных заказов пользователя из реактивного Flux.
+     * Проверяет отображение страницы списка всех оформленных заказов аутентифицированного пользователя из реактивного Flux.
      * </summary>
      **/
     @Test
+    @WithMockUser(username = TEST_USERNAME)
     public void getOrdersShouldReturnJournalPageWithOrdersList() {
         var keychronKeyboard = new ItemViewModel(
                 2L,
@@ -52,7 +61,7 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
         var mockOrder = new OrderViewModel(101L, List.of(keychronKeyboard), 22500L);
 
-        Mockito.when(orderService.findAll()).thenReturn(Flux.just(mockOrder));
+        Mockito.when(orderService.findAll(TEST_USERNAME)).thenReturn(Flux.just(mockOrder));
 
         webTestClient.get().uri("/orders")
                 .exchange()
@@ -64,15 +73,20 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
                     Assertions.assertTrue(htmlBody.contains("101"));
                 });
 
-        Mockito.verify(orderService, Mockito.times(1)).findAll();
+        Mockito.verify(orderService, Mockito.times(1)).findAll(TEST_USERNAME);
     }
+
+    // endregion
+
+    // region Tests for GET /orders/{id}
 
     /**
      * <summary>
-     * Проверяет отображение страницы конкретного заказа по умолчанию (без приветственного сообщения).
+     * Проверяет отображение страницы конкретного заказа пользователя по умолчанию (без приветственного сообщения).
      * </summary>
      **/
     @Test
+    @WithMockUser(username = TEST_USERNAME)
     public void getOrderShouldReturnOrderDetailsWithoutWelcomeMessage() {
         var orderId = 101L;
 
@@ -87,7 +101,7 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
 
         var mockOrder = new OrderViewModel(orderId, List.of(logitechMouse), 33600L);
 
-        Mockito.when(orderService.findById(orderId)).thenReturn(Mono.just(mockOrder));
+        Mockito.when(orderService.findById(TEST_USERNAME, orderId)).thenReturn(Mono.just(mockOrder));
 
         webTestClient.get().uri("/orders/{id}", orderId)
                 .exchange()
@@ -98,7 +112,7 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
                     Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
                 });
 
-        Mockito.verify(orderService, Mockito.times(1)).findById(orderId);
+        Mockito.verify(orderService, Mockito.times(1)).findById(TEST_USERNAME, orderId);
     }
 
     /**
@@ -107,12 +121,13 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
      * </summary>
      **/
     @Test
+    @WithMockUser(username = TEST_USERNAME)
     public void getOrderWithNewOrderParamTrueShouldPassFlagToModel() {
         var orderId = 102L;
 
         var mockOrder = new OrderViewModel(orderId, List.of(), 0L);
 
-        Mockito.when(orderService.findById(orderId)).thenReturn(Mono.just(mockOrder));
+        Mockito.when(orderService.findById(TEST_USERNAME, orderId)).thenReturn(Mono.just(mockOrder));
 
         webTestClient.get().uri(uriBuilder -> uriBuilder.path("/orders/{id}")
                         .queryParam("newOrder", "true")
@@ -122,57 +137,78 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
                 .expectBody(String.class)
                 .value(Assertions::assertNotNull);
 
-        Mockito.verify(orderService, Mockito.times(1)).findById(orderId);
+        Mockito.verify(orderService, Mockito.times(1)).findById(TEST_USERNAME, orderId);
     }
 
     /**
      * <summary>
-     * Проверяет, что при передаче некорректного типа идентификатора заказа в пути URl возвращается 400 Bad Request.
+     * Проверяет, что при передаче некорректного типа идентификатора заказа в пути URL возвращается 400 Bad Request.
      * </summary>
      **/
     @Test
     public void getOrderShouldReturnBadRequestWhenIdIsNotNumeric() {
-        webTestClient.get().uri("/orders/not-a-number")
+
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockOidcLogin()
+                        .idToken(token -> token
+                                .claim("preferred_username", TEST_USERNAME)
+                                .claim("sub", "user-sub-id"))
+                )
+                .get()
+                .uri("/orders/not-a-number")
                 .exchange()
                 .expectStatus().isBadRequest();
 
         Mockito.verifyNoInteractions(orderService);
     }
 
+    // endregion
+
+    // region Tests for POST /buy
+
     /**
      * <summary>
-     * Проверяет успешное оформление покупки через PurchaseService и перенаправление на страницу заказа, если покупка оплачена.
+     * Проверяет успешное оформление покупки через PurchaseService для аутентифицированного пользователя
+     * и перенаправление на страницу чека заказа.
      * </summary>
      **/
     @Test
     public void buyShouldCreateOrderAndRedirectToReceiptPageWhenCartIsNotEmpty() {
         var expectedOrderId = 42L;
 
-        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(CheckoutResultViewModel.paid(expectedOrderId)));
+        Mockito.when(purchaseService.buy(TEST_USERNAME))
+                .thenReturn(Mono.just(CheckoutResultViewModel.paid(expectedOrderId)));
 
-        webTestClient.post().uri("/buy")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy")
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/orders/42?newOrder=true");
 
-        Mockito.verify(purchaseService, Mockito.times(1)).buy();
+        Mockito.verify(purchaseService, Mockito.times(1)).buy(TEST_USERNAME);
     }
 
     /**
      * <summary>
-     * Проверяет возврат на страницу корзины, если при попытке покупки корзина покупателя оказалась пустой.
+     * Проверяет возврат на страницу корзины, если при попытке покупки корзина пользователя оказалась пустой.
      * </summary>
      **/
     @Test
     public void buyShouldRedirectBackToCartPageWhenCartIsEmpty() {
-        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(CheckoutResultViewModel.empty()));
+        Mockito.when(purchaseService.buy(TEST_USERNAME))
+                .thenReturn(Mono.just(CheckoutResultViewModel.empty()));
 
-        webTestClient.post().uri("/buy")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy")
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/cart/items");
 
-        Mockito.verify(purchaseService, Mockito.times(1)).buy();
+        Mockito.verify(purchaseService, Mockito.times(1)).buy(TEST_USERNAME);
     }
 
     /**
@@ -182,14 +218,18 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
      **/
     @Test
     public void buyShouldRedirectToCartWithPaymentErrorWhenRejected() {
-        Mockito.when(purchaseService.buy()).thenReturn(Mono.just(CheckoutResultViewModel.rejected("Недостаточно средств")));
+        Mockito.when(purchaseService.buy(TEST_USERNAME))
+                .thenReturn(Mono.just(CheckoutResultViewModel.rejected("Недостаточно средств")));
 
-        webTestClient.post().uri("/buy")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy")
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/cart/items?paymentError=true");
 
-        Mockito.verify(purchaseService, Mockito.times(1)).buy();
+        Mockito.verify(purchaseService, Mockito.times(1)).buy(TEST_USERNAME);
     }
 
     /**
@@ -199,14 +239,17 @@ public class OrderControllerIntegrationTest extends MyMarketAppApplicationTests 
      **/
     @Test
     public void buyShouldRedirectToCartWhenPurchaseServiceReturnsEmptyMono() {
-        Mockito.when(purchaseService.buy()).thenReturn(Mono.empty());
+        Mockito.when(purchaseService.buy(TEST_USERNAME)).thenReturn(Mono.empty());
 
-        webTestClient.post().uri("/buy")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/buy")
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/cart/items");
 
-        Mockito.verify(purchaseService, Mockito.times(1)).buy();
+        Mockito.verify(purchaseService, Mockito.times(1)).buy(TEST_USERNAME);
     }
 
     // endregion

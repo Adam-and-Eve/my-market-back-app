@@ -15,9 +15,11 @@ import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.mappers.OrderMapper;
 import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.models.OrderModel;
+import ru.yandex.practicum.mymarket.models.UserModel;
 import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repositories.OrderRepository;
+import ru.yandex.practicum.mymarket.repositories.UserRepository;
 import ru.yandex.practicum.mymarket.viewmodels.OrderViewModel;
 
 import java.time.Duration;
@@ -42,6 +44,9 @@ public class OrderServiceImplTest {
     @Mock
     private OrderMapper orderMapper;
 
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private OrderServiceImpl orderService;
 
@@ -51,14 +56,22 @@ public class OrderServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет получение списка всех заказов из Flux, когда они присутствуют в базе данных.
+     * Проверяет получение списка всех заказов пользователя из Flux, когда они присутствуют в базе данных.
      * </summary>
      **/
     @Test
     void findAllShouldReturnMappedViewModelsWhenOrdersExist() {
+        var username = "user";
+
+        var userId = 100L;
+
         var orderId = 1L;
 
-        var order = OrderModel.create();
+        var user = Mockito.mock(UserModel.class);
+
+        Mockito.when(user.getId()).thenReturn(userId);
+
+        var order = OrderModel.create(userId);
 
         ReflectionTestUtils.setField(order, "id", orderId);
 
@@ -66,17 +79,26 @@ public class OrderServiceImplTest {
 
         var mockViewModel = Mockito.mock(OrderViewModel.class);
 
-        Mockito.when(orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID)).thenReturn(Flux.just(order));
+        Mockito.when(userRepository.findByUsername(username)).thenReturn(Mono.just(user));
+
+        Mockito.when(orderRepository.findAllByUserIdAndStatusOrderByIdAsc(userId, OrderModel.STATUS_PAID))
+                .thenReturn(Flux.just(order));
 
         Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId)).thenReturn(Flux.just(orderItem));
 
         Mockito.when(orderMapper.toViewModel(order, List.of(orderItem))).thenReturn(mockViewModel);
 
-        StepVerifier.create(orderService.findAll().collectList())
+        StepVerifier.create(orderService.findAll(username).collectList())
                 .expectNextMatches(result ->
                         result.size() == 1 && result.getFirst() == mockViewModel
                 )
                 .verifyComplete();
+
+        Mockito.verify(userRepository, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(orderRepository, Mockito.times(1)).findAllByUserIdAndStatusOrderByIdAsc(userId, OrderModel.STATUS_PAID);
+
+        Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId);
     }
 
     /**
@@ -87,21 +109,29 @@ public class OrderServiceImplTest {
      **/
     @Test
     void findAllShouldPreserveOrderWhenPositionLoadingIsDelayedForFirstItem() {
+        var username = "user";
+
+        var userId = 100L;
+
         var orderId1 = 1L;
 
         var orderId2 = 2L;
 
         var orderId3 = 3L;
 
-        var order1 = OrderModel.create();
+        var user = Mockito.mock(UserModel.class);
+
+        Mockito.when(user.getId()).thenReturn(userId);
+
+        var order1 = OrderModel.create(userId);
 
         ReflectionTestUtils.setField(order1, "id", orderId1);
 
-        var order2 = OrderModel.create();
+        var order2 = OrderModel.create(userId);
 
         ReflectionTestUtils.setField(order2, "id", orderId2);
 
-        var order3 = OrderModel.create();
+        var order3 = OrderModel.create(userId);
 
         ReflectionTestUtils.setField(order3, "id", orderId3);
 
@@ -117,7 +147,9 @@ public class OrderServiceImplTest {
 
         var mockViewModel3 = Mockito.mock(OrderViewModel.class);
 
-        Mockito.when(orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID))
+        Mockito.when(userRepository.findByUsername(username)).thenReturn(Mono.just(user));
+
+        Mockito.when(orderRepository.findAllByUserIdAndStatusOrderByIdAsc(userId, OrderModel.STATUS_PAID))
                 .thenReturn(Flux.just(order1, order2, order3));
 
         Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId1))
@@ -135,13 +167,15 @@ public class OrderServiceImplTest {
 
         Mockito.when(orderMapper.toViewModel(order3, List.of(orderItem3))).thenReturn(mockViewModel3);
 
-        StepVerifier.create(orderService.findAll())
+        StepVerifier.create(orderService.findAll(username))
                 .expectNext(mockViewModel1)
                 .expectNext(mockViewModel2)
                 .expectNext(mockViewModel3)
                 .verifyComplete();
 
-        Mockito.verify(orderRepository, Mockito.times(1)).findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID);
+        Mockito.verify(userRepository, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(orderRepository, Mockito.times(1)).findAllByUserIdAndStatusOrderByIdAsc(userId, OrderModel.STATUS_PAID);
 
         Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId1);
 
@@ -152,16 +186,31 @@ public class OrderServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет, что метод findAll возвращает пустой поток, если заказов еще нет.
+     * Проверяет, что метод findAll возвращает пустой поток, если у пользователя еще нет заказов.
      * </summary>
      **/
     @Test
     void findAllShouldReturnEmptyListWhenNoOrdersExist() {
-        Mockito.when(orderRepository.findAllByStatusOrderByIdAsc(OrderModel.STATUS_PAID)).thenReturn(Flux.empty());
+        var username = "user";
 
-        StepVerifier.create(orderService.findAll().collectList())
+        var userId = 100L;
+
+        var user = Mockito.mock(UserModel.class);
+
+        Mockito.when(user.getId()).thenReturn(userId);
+
+        Mockito.when(userRepository.findByUsername(username)).thenReturn(Mono.just(user));
+
+        Mockito.when(orderRepository.findAllByUserIdAndStatusOrderByIdAsc(userId, OrderModel.STATUS_PAID))
+                .thenReturn(Flux.empty());
+
+        StepVerifier.create(orderService.findAll(username).collectList())
                 .expectNextMatches(List::isEmpty)
                 .verifyComplete();
+
+        Mockito.verify(userRepository, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(orderRepository, Mockito.times(1)).findAllByUserIdAndStatusOrderByIdAsc(userId, OrderModel.STATUS_PAID);
 
         Mockito.verifyNoInteractions(orderMapper, orderItemRepository);
     }
@@ -172,14 +221,22 @@ public class OrderServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет успешный поиск существующего заказа по его идентификатору через Mono.
+     * Проверяет успешный поиск существующего заказа конкретного пользователя по его идентификатору через Mono.
      * </summary>
      **/
     @Test
     void findByIdShouldReturnViewModelWhenOrderExists() {
+        var username = "user";
+
+        var userId = 100L;
+
         var orderId = 10L;
 
-        var order = OrderModel.create();
+        var user = Mockito.mock(UserModel.class);
+
+        Mockito.when(user.getId()).thenReturn(userId);
+
+        var order = OrderModel.create(userId);
 
         ReflectionTestUtils.setField(order, "id", orderId);
 
@@ -187,39 +244,57 @@ public class OrderServiceImplTest {
 
         var mockViewModel = Mockito.mock(OrderViewModel.class);
 
-        Mockito.when(orderRepository.findById(orderId)).thenReturn(Mono.just(order));
+        Mockito.when(userRepository.findByUsername(username)).thenReturn(Mono.just(user));
+
+        Mockito.when(orderRepository.findByIdAndUserId(orderId, userId)).thenReturn(Mono.just(order));
 
         Mockito.when(orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId)).thenReturn(Flux.just(orderItem));
 
         Mockito.when(orderMapper.toViewModel(order, List.of(orderItem))).thenReturn(mockViewModel);
 
-        StepVerifier.create(orderService.findById(orderId))
+        StepVerifier.create(orderService.findById(username, orderId))
                 .expectNext(mockViewModel)
                 .verifyComplete();
+
+        Mockito.verify(userRepository, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(orderRepository, Mockito.times(1)).findByIdAndUserId(orderId, userId);
+
+        Mockito.verify(orderItemRepository, Mockito.times(1)).findAllByOrderIdOrderByIdAsc(orderId);
     }
 
     /**
      * <summary>
-     * Проверяет выбрасывание ResponseStatusException со статусом 404 из Mono.error(), если заказ не найден.
+     * Проверяет выбрасывание ResponseStatusException со статусом 404 из Mono.error(), если заказ не найден у данного пользователя.
      * </summary>
      **/
     @Test
     void findByIdShouldThrowNotFoundWhenOrderDoesNotExist() {
+        var username = "user";
+
+        var userId = 100L;
+
         var orderId = 999L;
 
-        Mockito.when(orderRepository.findById(orderId)).thenReturn(Mono.empty());
+        var user = Mockito.mock(UserModel.class);
 
-        StepVerifier.create(orderService.findById(orderId))
+        Mockito.when(user.getId()).thenReturn(userId);
+
+        Mockito.when(userRepository.findByUsername(username)).thenReturn(Mono.just(user));
+
+        Mockito.when(orderRepository.findByIdAndUserId(orderId, userId)).thenReturn(Mono.empty());
+
+        StepVerifier.create(orderService.findById(username, orderId))
                 .expectErrorMatches(throwable ->
-                        {
-                            if (!(throwable instanceof ResponseStatusException) ||
-                                    !((ResponseStatusException) throwable).getStatusCode().equals(HttpStatus.NOT_FOUND))
-                                return false;
-                            assert ((ResponseStatusException) throwable).getReason() != null;
-                            return ((ResponseStatusException) throwable).getReason().equals("Order not found.");
-                        }
+                        throwable instanceof ResponseStatusException resEx &&
+                                resEx.getStatusCode().equals(HttpStatus.NOT_FOUND) &&
+                                "Order not found.".equals(resEx.getReason())
                 )
                 .verify();
+
+        Mockito.verify(userRepository, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(orderRepository, Mockito.times(1)).findByIdAndUserId(orderId, userId);
 
         Mockito.verifyNoInteractions(orderItemRepository, orderMapper);
     }

@@ -19,17 +19,6 @@ public interface CartItemRepository extends ReactiveCrudRepository<CartItemModel
 
     /**
      * <summary>
-     * Выполняет поиск элемента корзины по уникальному идентификатору связанного с ним товара.
-     * </summary>
-     * @param itemId Уникальный идентификатор товара.
-     * <return>
-     * @return Реактивный контейнер Mono, содержащий найденную сущность элемента корзины, или Mono.empty(), если элемент не найден.
-     * </return>
-     **/
-    Mono<CartItemModel> findByItemId(final long itemId);
-
-    /**
-     * <summary>
      * Выполняет пакетную выборку элементов корзины пользователя для переданной коллекции идентификаторов товаров.
      * Используется для оптимизации запросов и предотвращения проблемы N+1 при пагинации каталога.
      * </summary>
@@ -52,6 +41,10 @@ public interface CartItemRepository extends ReactiveCrudRepository<CartItemModel
      * </return>
      **/
     Flux<CartItemModel> findAllByUserIdOrderByItemIdAsc(final long userId);
+
+    Mono<CartItemModel> findByUserIdAndItemId(
+            long userId,
+            long itemId);
 
     // endregion
 }

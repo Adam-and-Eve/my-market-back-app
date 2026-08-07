@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -28,6 +30,12 @@ import java.util.List;
  **/
 public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTests {
 
+    // region Constants
+
+    private static final String TEST_USERNAME = "user";
+
+    // endregion
+
     // region Fields
 
     @MockitoBean
@@ -38,14 +46,15 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
     // endregion
 
-    // region Tests
+    // region Tests for GET /items
 
     /**
      * <summary>
-     * Проверяет отображение страницы каталога с сеточной структурой расположения товаров.
+     * Проверяет отображение страницы каталога с сеточной структурой расположения товаров для аутентифицированного пользователя.
      * </summary>
      **/
     @Test
+    @WithMockUser(username = TEST_USERNAME)
     public void getCatalogShouldReturnItemsPageWithGridStructure() {
         var asusLaptop = new ItemViewModel(
                 1L,
@@ -77,7 +86,7 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         var catalogPageViewModel = new CatalogPageViewModel(grid, "Gaming", "price_desc", paging);
 
-        Mockito.when(itemService.findCatalog("Gaming", "price_desc", 0, 2))
+        Mockito.when(itemService.findCatalog(TEST_USERNAME, "Gaming", "price_desc", 0, 2))
                 .thenReturn(Mono.just(catalogPageViewModel));
 
         webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
@@ -95,15 +104,92 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                     Assertions.assertTrue(htmlBody.contains("Клавиатура Keychron Q1 Pro"));
                 });
 
-        Mockito.verify(itemService, Mockito.times(1)).findCatalog("Gaming", "price_desc", 0, 2);
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(TEST_USERNAME, "Gaming", "price_desc", 0, 2);
     }
 
     /**
      * <summary>
-     * Проверяет отображение детальной карточки для конкретного инициализированного товара (мышь Logitech).
+     * Проверяет успешную обработку GET-запроса без указания размера страницы (pageSize = null).
      * </summary>
      **/
     @Test
+    @WithMockUser(username = TEST_USERNAME)
+    public void getCatalogShouldHandleNullPageSize() {
+        var mockPaging = new PagingViewModel(5, 1, false, false);
+
+        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
+
+        Mockito.when(itemService.findCatalog(TEST_USERNAME, null, null, null, null))
+                .thenReturn(Mono.just(mockPage));
+
+        webTestClient.get().uri("/items")
+                .exchange()
+                .expectStatus().isOk();
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(TEST_USERNAME, null, null, null, null);
+    }
+
+    /**
+     * <summary>
+     * Проверяет передачу значения pageSize = 0 в сервис каталога.
+     * </summary>
+     **/
+    @Test
+    @WithMockUser(username = TEST_USERNAME)
+    public void getCatalogShouldPassZeroPageSizeToService() {
+        var mockPaging = new PagingViewModel(5, 1, false, false);
+
+        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
+
+        Mockito.when(itemService.findCatalog(TEST_USERNAME, null, null, null, 0))
+                .thenReturn(Mono.just(mockPage));
+
+        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("pageSize", 0)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(TEST_USERNAME, null, null, null, 0);
+    }
+
+    /**
+     * <summary>
+     * Проверяет передачу значения pageSize = 1000000 в сервис каталога.
+     * </summary>
+     **/
+    @Test
+    @WithMockUser(username = TEST_USERNAME)
+    public void getCatalogShouldPassHugePageSizeToService() {
+        var hugePageSize = 1_000_000;
+
+        var mockPaging = new PagingViewModel(100, 1, false, false);
+
+        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
+
+        Mockito.when(itemService.findCatalog(TEST_USERNAME, null, null, null, hugePageSize))
+                .thenReturn(Mono.just(mockPage));
+
+        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
+                        .queryParam("pageSize", hugePageSize)
+                        .build())
+                .exchange()
+                .expectStatus().isOk();
+
+        Mockito.verify(itemService, Mockito.times(1)).findCatalog(TEST_USERNAME, null, null, null, hugePageSize);
+    }
+
+    // endregion
+
+    // region Tests for GET /items/{id}
+
+    /**
+     * <summary>
+     * Проверяет отображение детальной карточки для конкретного инициализированного товара с учетом аутентификации.
+     * </summary>
+     **/
+    @Test
+    @WithMockUser(username = TEST_USERNAME)
     public void getItemShouldReturnItemDetailsForLogitechMouse() {
         var itemId = 3L;
 
@@ -116,7 +202,7 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                 0
         );
 
-        Mockito.when(itemService.findById(itemId)).thenReturn(Mono.just(logitechMouseViewModel));
+        Mockito.when(itemService.findById(TEST_USERNAME, itemId)).thenReturn(Mono.just(logitechMouseViewModel));
 
         webTestClient.get().uri("/items/{id}", itemId)
                 .exchange()
@@ -127,21 +213,27 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
                     Assertions.assertTrue(htmlBody.contains("Мышь Logitech G Pro X Superlight 2"));
                 });
 
-        Mockito.verify(itemService, Mockito.times(1)).findById(itemId);
+        Mockito.verify(itemService, Mockito.times(1)).findById(TEST_USERNAME, itemId);
     }
+
+    // endregion
+
+    // region Tests for POST /items
 
     /**
      * <summary>
-     * Проверяет добавление процессора Intel в корзину с последующим сохранением контекста поиска Arrow Lake и редиректом.
+     * Проверяет добавление товара в корзину с витрины каталога с сохранением контекста поиска и выполнением редиректа.
      * </summary>
      **/
     @Test
     public void updateCatalogItemShouldAddIntelProcessorAndRedirectWithSearchContext() {
         var itemId = 4L;
 
-        Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.PLUS)).thenReturn(Mono.empty());
+        Mockito.when(cartService.updateItemCount(TEST_USERNAME, itemId, CartActionEnumModel.PLUS))
+                .thenReturn(Mono.empty());
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
         formData.add("id", String.valueOf(itemId));
 
         formData.add("action", "PLUS");
@@ -154,41 +246,17 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         formData.add("pageSize", "10");
 
-        webTestClient.post().uri("/items")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/items?search=Arrow%20Lake&sort=price_asc&pageNumber=0&pageSize=10");
 
-        Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.PLUS);
-    }
-
-    /**
-     * <summary>
-     * Проверяет изменение количества товара со страницы детальной карточки и последующий редирект обратно на эту карточку.
-     * </summary>
-     **/
-    @Test
-    public void updateItemShouldDecreaseKeychronQuantityAndRedirectToItemDetails() {
-        var itemId = 2L;
-
-        Mockito.when(cartService.updateItemCount(itemId, CartActionEnumModel.MINUS)).thenReturn(Mono.empty());
-
-        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-
-        formData.add("id", String.valueOf(itemId));
-
-        formData.add("action", "MINUS");
-
-        webTestClient.post().uri("/items/{id}", itemId)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(BodyInserters.fromFormData(formData))
-                .exchange()
-                .expectStatus().is3xxRedirection()
-                .expectHeader().valueEquals("Location", "/items/" + itemId);
-
-        Mockito.verify(cartService, Mockito.times(1)).updateItemCount(itemId, CartActionEnumModel.MINUS);
+        Mockito.verify(cartService, Mockito.times(1)).updateItemCount(TEST_USERNAME, itemId, CartActionEnumModel.PLUS);
     }
 
     /**
@@ -202,7 +270,10 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         formData.add("id", "4");
 
-        webTestClient.post().uri("/items")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
@@ -222,7 +293,10 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         formData.add("action", "PLUS");
 
-        webTestClient.post().uri("/items")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
@@ -244,13 +318,51 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         formData.add("action", "INVALID_ACTION");
 
-        webTestClient.post().uri("/items")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
                 .expectStatus().isBadRequest();
 
         Mockito.verifyNoInteractions(cartService, itemService);
+    }
+
+    // endregion
+
+    // region Tests for POST /items/{id}
+
+    /**
+     * <summary>
+     * Проверяет изменение количества товара со страницы детальной карточки и последующий редирект обратно на эту карточку.
+     * </summary>
+     **/
+    @Test
+    public void updateItemShouldDecreaseKeychronQuantityAndRedirectToItemDetails() {
+        var itemId = 2L;
+
+        Mockito.when(cartService.updateItemCount(TEST_USERNAME, itemId, CartActionEnumModel.MINUS))
+                .thenReturn(Mono.empty());
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+
+        formData.add("id", String.valueOf(itemId));
+
+        formData.add("action", "MINUS");
+
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items/{id}", itemId)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(formData))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/items/" + itemId);
+
+        Mockito.verify(cartService, Mockito.times(1)).updateItemCount(TEST_USERNAME, itemId, CartActionEnumModel.MINUS);
     }
 
     /**
@@ -264,7 +376,10 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         formData.add("id", "2");
 
-        webTestClient.post().uri("/items/{id}", 2L)
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items/{id}", 2L)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
@@ -286,82 +401,16 @@ public class CatalogControllerIntegrationTest extends MyMarketAppApplicationTest
 
         formData.add("action", "UNKNOWN_ACTION");
 
-        webTestClient.post().uri("/items/{id}", 2L)
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockUser(TEST_USERNAME))
+                .mutateWith(SecurityMockServerConfigurers.csrf())
+                .post().uri("/items/{id}", 2L)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(BodyInserters.fromFormData(formData))
                 .exchange()
                 .expectStatus().isBadRequest();
 
         Mockito.verifyNoInteractions(cartService, itemService);
-    }
-
-    /**
-     * <summary>
-     * Проверяет успешную обработку GET-запроса без указания размера страницы (pageSize = null).
-     * </summary>
-     **/
-    @Test
-    public void getCatalogShouldHandleNullPageSize() {
-        var mockPaging = new PagingViewModel(5, 1, false, false);
-
-        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
-
-        Mockito.when(itemService.findCatalog(null, null, null, null))
-                .thenReturn(Mono.just(mockPage));
-
-        webTestClient.get().uri("/items")
-                .exchange()
-                .expectStatus().isOk();
-
-        Mockito.verify(itemService, Mockito.times(1)).findCatalog(null, null, null, null);
-    }
-
-    /**
-     * <summary>
-     * Проверяет передачу значения pageSize = 0 в сервис каталога.
-     * </summary>
-     **/
-    @Test
-    public void getCatalogShouldPassZeroPageSizeToService() {
-        var mockPaging = new PagingViewModel(5, 1, false, false);
-
-        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
-
-        Mockito.when(itemService.findCatalog(null, null, null, 0))
-                .thenReturn(Mono.just(mockPage));
-
-        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
-                        .queryParam("pageSize", 0)
-                        .build())
-                .exchange()
-                .expectStatus().isOk();
-
-        Mockito.verify(itemService, Mockito.times(1)).findCatalog(null, null, null, 0);
-    }
-
-    /**
-     * <summary>
-     * Проверяет передачу значения pageSize = 1000000 в сервис каталога.
-     * </summary>
-     **/
-    @Test
-    public void getCatalogShouldPassHugePageSizeToService() {
-        var hugePageSize = 1_000_000;
-
-        var mockPaging = new PagingViewModel(100, 1, false, false);
-
-        var mockPage = new CatalogPageViewModel(List.of(), "", "NO", mockPaging);
-
-        Mockito.when(itemService.findCatalog(null, null, null, hugePageSize))
-                .thenReturn(Mono.just(mockPage));
-
-        webTestClient.get().uri(uriBuilder -> uriBuilder.path("/items")
-                        .queryParam("pageSize", hugePageSize)
-                        .build())
-                .exchange()
-                .expectStatus().isOk();
-
-        Mockito.verify(itemService, Mockito.times(1)).findCatalog(null, null, null, hugePageSize);
     }
 
     // endregion

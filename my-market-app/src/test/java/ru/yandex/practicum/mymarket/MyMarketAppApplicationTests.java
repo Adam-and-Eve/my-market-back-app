@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.test.web.servlet.MockMvc;
@@ -40,7 +41,9 @@ public class MyMarketAppApplicationTests {
 
 	@BeforeEach
 	void clearDatabase() {
-		this.webTestClient = WebTestClient.bindToApplicationContext(applicationContext).build();
+		this.webTestClient = WebTestClient.bindToApplicationContext(applicationContext)
+				.apply(SecurityMockServerConfigurers.springSecurity())
+				.build();
 
 		databaseClient.sql("DELETE FROM cart_items").then()
 				.then(databaseClient.sql("DELETE FROM items").then())

@@ -30,6 +30,8 @@ public class CartItemModelTest {
 
         Assertions.assertNull(cartItem.getId());
 
+        Assertions.assertNull(cartItem.getUserId());
+
         Assertions.assertEquals(item, cartItem.getItem());
 
         Assertions.assertEquals(item.getId(), cartItem.getItemId());
@@ -65,21 +67,25 @@ public class CartItemModelTest {
 
     /**
      * <summary>
-     * Проверяет успешное создание нового элемента корзины через конструктор с прямым указанием идентификатора товара.
+     * Проверяет успешное создание нового элемента корзины через конструктор с указанием идентификаторов пользователя и товара.
      * При этом транзиентная ссылка на доменную модель товара должна оставаться null.
      * </summary>
      **/
     @Test
-    public void constructorWithItemIdShouldCreateNewInstanceWithValidArguments() {
+    public void constructorWithUserIdAndItemIdShouldCreateNewInstanceWithValidArguments() {
+        var userId = 10L;
+
         var itemId = 42L;
 
         var quantity = 2;
 
-        var cartItem = new CartItemModel(itemId, quantity);
+        var cartItem = new CartItemModel(userId, itemId, quantity);
 
         Assertions.assertNotNull(cartItem);
 
         Assertions.assertNull(cartItem.getId());
+
+        Assertions.assertEquals(userId, cartItem.getUserId());
 
         Assertions.assertEquals(itemId, cartItem.getItemId());
 
@@ -90,25 +96,115 @@ public class CartItemModelTest {
 
     /**
      * <summary>
-     * Проверяет выброс исключения при передаче null-идентификатора товара в конструктор.
+     * Проверяет выброс исключения при передаче null-идентификатора покупателя в конструктор.
      * </summary>
      **/
     @Test
-    public void constructorWithNullItemIdShouldThrowException() {
+    public void constructorWithNullUserIdShouldThrowException() {
         Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            new CartItemModel((Long) null, 1);
+            new CartItemModel(null, 42L, 1);
         });
     }
 
     /**
      * <summary>
-     * Проверяет выброс исключения при передаче отрицательного количества товара в конструктор с идентификатором.
+     * Проверяет выброс исключения при передаче null-идентификатора товара в конструктор с идентификатором пользователя.
      * </summary>
      **/
     @Test
-    public void constructorWithNegativeQuantityAndItemIdShouldThrowException() {
+    public void constructorWithNullItemIdShouldThrowException() {
         Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            new CartItemModel(42L, -1);
+            new CartItemModel(10L, null, 1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче отрицательного количества товара в конструктор с идентификаторами пользователя и товара.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithNegativeQuantityAndUserIdAndItemIdShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(10L, 42L, -1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет успешное создание сущности через полный конструктор (PersistenceCreator), используемый при маппинге из БД.
+     * </summary>
+     **/
+    @Test
+    public void constructorWithAllArgumentsShouldCreateInstanceWithValidState() {
+        var id = 1L;
+
+        var userId = 10L;
+
+        var itemId = 42L;
+
+        var quantity = 5;
+
+        var cartItem = new CartItemModel(id, userId, itemId, quantity);
+
+        Assertions.assertNotNull(cartItem);
+
+        Assertions.assertEquals(id, cartItem.getId());
+
+        Assertions.assertEquals(userId, cartItem.getUserId());
+
+        Assertions.assertEquals(itemId, cartItem.getItemId());
+
+        Assertions.assertNull(cartItem.getItem());
+
+        Assertions.assertEquals(quantity, cartItem.getQuantity());
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче null-идентификатора записи в полный конструктор.
+     * </summary>
+     **/
+    @Test
+    public void persistenceConstructorWithNullIdShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(null, 10L, 42L, 1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче null-идентификатора покупателя в полный конструктор.
+     * </summary>
+     **/
+    @Test
+    public void persistenceConstructorWithNullUserIdShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(1L, null, 42L, 1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче null-идентификатора товара в полный конструктор.
+     * </summary>
+     **/
+    @Test
+    public void persistenceConstructorWithNullItemIdShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(1L, 10L, null, 1);
+        });
+    }
+
+    /**
+     * <summary>
+     * Проверяет выброс исключения при передаче отрицательного количества товара в полный конструктор.
+     * </summary>
+     **/
+    @Test
+    public void persistenceConstructorWithNegativeQuantityShouldThrowException() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> {
+            new CartItemModel(1L, 10L, 42L, -1);
         });
     }
 
@@ -125,6 +221,8 @@ public class CartItemModelTest {
         Assertions.assertNotNull(cartItem);
 
         Assertions.assertNull(cartItem.getId());
+
+        Assertions.assertNull(cartItem.getUserId());
 
         Assertions.assertNull(cartItem.getItemId());
 
@@ -180,6 +278,8 @@ public class CartItemModelTest {
 
         Assertions.assertEquals(0, cartItem.getQuantity());
     }
+
+    // endregion
 
     // endregion
 }

@@ -158,10 +158,10 @@ public class CartServiceImpl implements CartService {
     @Override
     public Mono<Integer> findCountForItem(final String username, final long itemId) {
         return findUserId(username)
-                .flatMap(userId -> cartItemRepository.findAllByUserIdAndItemIdIn(userId, List.of(itemId))
-                        .next()
-                        .map(CartItemModel::getQuantity)
-                        .defaultIfEmpty(0));
+                .flatMap(userId ->
+                        cartItemRepository.findByUserIdAndItemId(userId, itemId)
+                                .map(CartItemModel::getQuantity)
+                                .defaultIfEmpty(0));
     }
 
     /**
@@ -170,13 +170,15 @@ public class CartServiceImpl implements CartService {
      * </summary>
      **/
     private Mono<Void> addItem(final long userId, final long itemId) {
-        return cartItemRepository.findAllByUserIdAndItemIdIn(userId, List.of(itemId))
-                .next()
-                .switchIfEmpty(itemRepository.findById(itemId)
-                        .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found")))
-                        .map(item -> new CartItemModel(userId, item.getId(), 0)))
+        return cartItemRepository.findByUserIdAndItemId(userId, itemId)
+                .switchIfEmpty(Mono.defer(() -> itemRepository.findById(itemId)
+                        .switchIfEmpty(Mono.error(new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Item not found")))
+                        .map(item -> new CartItemModel(userId, item.getId(), 0))))
                 .flatMap(cartItem -> {
                     cartItem.increase();
+
                     return cartItemRepository.save(cartItem).then();
                 });
     }
@@ -187,8 +189,7 @@ public class CartServiceImpl implements CartService {
      * </summary>
      **/
     private Mono<Void> removeOneItem(final long userId, final long itemId) {
-        return cartItemRepository.findAllByUserIdAndItemIdIn(userId, List.of(itemId))
-                .next()
+        return cartItemRepository.findByUserIdAndItemId(userId, itemId)
                 .flatMap(cartItem -> {
                     cartItem.decrease();
 
@@ -206,8 +207,7 @@ public class CartServiceImpl implements CartService {
      * </summary>
      **/
     private Mono<Void> deleteItem(final long userId, final long itemId) {
-        return cartItemRepository.findAllByUserIdAndItemIdIn(userId, List.of(itemId))
-                .next()
+        return cartItemRepository.findByUserIdAndItemId(userId, itemId)
                 .flatMap(cartItemRepository::delete);
     }
 

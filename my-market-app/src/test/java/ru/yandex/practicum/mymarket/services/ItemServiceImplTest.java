@@ -19,10 +19,12 @@ import ru.yandex.practicum.mymarket.interfaces.CartService;
 import ru.yandex.practicum.mymarket.interfaces.ItemCacheService;
 import ru.yandex.practicum.mymarket.mappers.ItemMapper;
 import ru.yandex.practicum.mymarket.models.ItemModel;
+import ru.yandex.practicum.mymarket.models.ItemSortEnumModel;
 import ru.yandex.practicum.mymarket.repositories.ItemRepository;
 import ru.yandex.practicum.mymarket.viewmodels.ItemViewModel;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -64,7 +66,9 @@ public class ItemServiceImplTest {
      * </summary>
      **/
     @Test
-    void findAllShouldReturnListOfItemsFromRepository() {
+    void findAllShouldReturnListOfItemsFromCacheService() {
+        var username = "user";
+
         var item1 = new ItemModel("Novation Launchkey", "Studio MIDI", "/img1.png", 45000L);
 
         var item2 = new ItemModel("Xiaomi Mi Mix 4", "Flagship Phone", "/img2.png", 60000L);
@@ -74,10 +78,10 @@ public class ItemServiceImplTest {
         Mockito.when(itemCacheService.findAll(Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        StepVerifier.create(itemService.findAll().collectList())
+        StepVerifier.create(itemService.findAll(username).collectList())
                 .expectNextMatches(actualItems ->
                         actualItems.size() == 2 &&
-                                actualItems.getFirst().getTitle().equals("Novation Launchkey") &&
+                                actualItems.get(0).getTitle().equals("Novation Launchkey") &&
                                 actualItems.get(1).getTitle().equals("Xiaomi Mi Mix 4")
                 )
                 .verifyComplete();
@@ -93,11 +97,13 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет успешное получение и маппинг обогащенной View-модели товара из кэша/БД при его наличии.
+     * Проверяет успешное получение и маппинг обогащенной View-модели товара из кэша/БД с количеством из корзины конкретного пользователя.
      * </summary>
      **/
     @Test
     void findByIdShouldReturnMappedViewModelWhenItemExists() {
+        var username = "user";
+
         var itemId = 1L;
 
         var cartCount = 3;
@@ -112,18 +118,19 @@ public class ItemServiceImplTest {
 
         Mockito.when(itemCacheService.findById(Mockito.eq(itemId), Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
-
-        Mockito.when(cartService.findCountForItem(itemId)).thenReturn(Mono.just(cartCount));
+        Mockito.when(cartService.findCountForItem(username, itemId)).thenReturn(Mono.just(cartCount));
 
         Mockito.when(itemMapper.toViewModel(itemModel, cartCount)).thenReturn(expectedViewModel);
 
-        StepVerifier.create(itemService.findById(itemId))
+        StepVerifier.create(itemService.findById(username, itemId))
                 .expectNextMatches(actualViewModel ->
                         actualViewModel.title().equals(expectedViewModel.title()) && actualViewModel.count() == cartCount
                 )
                 .verifyComplete();
 
         Mockito.verify(itemCacheService, Mockito.times(1)).findById(Mockito.eq(itemId), Mockito.any());
+
+        Mockito.verify(cartService, Mockito.times(1)).findCountForItem(username, itemId);
     }
 
     /**
@@ -133,6 +140,8 @@ public class ItemServiceImplTest {
      **/
     @Test
     void findByIdShouldThrowResponseStatusExceptionWhenItemDoesNotExist() {
+        var username = "user";
+
         long nonExistingId = 999L;
 
         Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Mono.empty());
@@ -140,15 +149,11 @@ public class ItemServiceImplTest {
         Mockito.when(itemCacheService.findById(Mockito.eq(nonExistingId), Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
 
-        StepVerifier.create(itemService.findById(nonExistingId))
+        StepVerifier.create(itemService.findById(username, nonExistingId))
                 .expectErrorMatches(throwable ->
-                        {
-                            if (!(throwable instanceof ResponseStatusException) ||
-                                    !((ResponseStatusException) throwable).getStatusCode().equals(HttpStatus.NOT_FOUND))
-                                return false;
-                            assert ((ResponseStatusException) throwable).getReason() != null;
-                            return ((ResponseStatusException) throwable).getReason().equals("Item not found.");
-                        }
+                        throwable instanceof ResponseStatusException resEx &&
+                                resEx.getStatusCode().equals(HttpStatus.NOT_FOUND) &&
+                                "Item not found.".equals(resEx.getReason())
                 )
                 .verify();
     }
@@ -164,6 +169,8 @@ public class ItemServiceImplTest {
      **/
     @Test
     void findModelByIdShouldReturnDomainModelWhenItemExists() {
+        var username = "user";
+
         long itemId = 42L;
 
         var expectedModel = new ItemModel("Xiaomi Mi Mix 4", "Flagship Phone", "/img2.png", 60000L);
@@ -173,7 +180,7 @@ public class ItemServiceImplTest {
         Mockito.when(itemCacheService.findById(Mockito.eq(itemId), Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
 
-        StepVerifier.create(itemService.findModelById(itemId))
+        StepVerifier.create(itemService.findModelById(username, itemId))
                 .expectNext(expectedModel)
                 .verifyComplete();
     }
@@ -185,6 +192,8 @@ public class ItemServiceImplTest {
      **/
     @Test
     void findModelByIdShouldThrowResponseStatusExceptionWhenItemDoesNotExist() {
+        var username = "user";
+
         long nonExistingId = 999L;
 
         Mockito.when(itemRepository.findById(nonExistingId)).thenReturn(Mono.empty());
@@ -192,15 +201,11 @@ public class ItemServiceImplTest {
         Mockito.when(itemCacheService.findById(Mockito.eq(nonExistingId), Mockito.any()))
                 .thenAnswer(invocation -> invocation.getArgument(1));
 
-        StepVerifier.create(itemService.findModelById(nonExistingId))
+        StepVerifier.create(itemService.findModelById(username, nonExistingId))
                 .expectErrorMatches(throwable ->
-                        {
-                            if (!(throwable instanceof ResponseStatusException) ||
-                                    !((ResponseStatusException) throwable).getStatusCode().equals(HttpStatus.NOT_FOUND))
-                                return false;
-                            assert ((ResponseStatusException) throwable).getReason() != null;
-                            return ((ResponseStatusException) throwable).getReason().equals("Item not found.");
-                        }
+                        throwable instanceof ResponseStatusException resEx &&
+                                resEx.getStatusCode().equals(HttpStatus.NOT_FOUND) &&
+                                "Item not found.".equals(resEx.getReason())
                 )
                 .verify();
     }
@@ -211,16 +216,18 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет сборку нефильтрованной страницы каталога с использованием мока CatalogHelper.
+     * Проверяет сборку нефильтрованной страницы каталога из кэша с расчетом количества элементов в корзине пользователя.
      * </summary>
      **/
     @Test
     void findCatalogShouldReturnUnfilteredPageWhenSearchIsBlank() {
+        var username = "user";
+
         var rawSearch = "   ";
 
         var normalizedSearch = "";
 
-        var rawSort = "DEFAULT";
+        var rawSort = "NO";
 
         var pageNumber = 1;
 
@@ -230,11 +237,7 @@ public class ItemServiceImplTest {
 
         ReflectionTestUtils.setField(item, "id", 1L);
 
-        var itemsList = List.of(item);
-
         var mockCounts = Map.of(item.getId(), 2);
-
-        var pageable = PageRequest.of(0, 10, Sort.unsorted());
 
         Mockito.when(catalogHelper.normalizeSearch(rawSearch)).thenReturn(normalizedSearch);
 
@@ -242,42 +245,46 @@ public class ItemServiceImplTest {
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveSort(Mockito.any())).thenReturn(Sort.unsorted());
+        Mockito.when(catalogHelper.resolveComparator(ItemSortEnumModel.NO)).thenReturn((a, b) -> 0);
 
-        Mockito.when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", "", pageable))
-                .thenReturn(Flux.just(item));
+        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item));
 
-        Mockito.when(itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", ""))
-                .thenReturn(Mono.just(1L));
+        Mockito.when(itemCacheService.findAll(Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Mockito.when(cartService.findCountsForItems(List.of(1L))).thenReturn(Mono.just(mockCounts));
+        Mockito.when(cartService.findCountsForItems(username, List.of(1L))).thenReturn(Mono.just(mockCounts));
 
-        Mockito.when(itemMapper.toRows(itemsList, mockCounts)).thenReturn(Collections.emptyList());
+        Mockito.when(itemMapper.toRows(List.of(item), mockCounts)).thenReturn(Collections.emptyList());
 
-        StepVerifier.create(itemService.findCatalog(rawSearch, rawSort, pageNumber, pageSize))
+        StepVerifier.create(itemService.findCatalog(username, rawSearch, rawSort, pageNumber, pageSize))
                 .expectNextMatches(catalogResult ->
-                        catalogResult.search().isEmpty()
+                        catalogResult.search().isEmpty() &&
+                                catalogResult.sort().equals(ItemSortEnumModel.NO.name()) &&
+                                catalogResult.paging().pageNumber() == 1 &&
+                                !catalogResult.paging().hasPrevious() &&
+                                !catalogResult.paging().hasNext()
                 )
                 .verifyComplete();
 
         Mockito.verify(catalogHelper, Mockito.times(1)).normalizeSearch(rawSearch);
 
-        Mockito.verify(itemRepository, Mockito.times(1))
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase("", "", pageable);
+        Mockito.verify(cartService, Mockito.times(1)).findCountsForItems(username, List.of(1L));
     }
 
     /**
      * <summary>
-     * Проверяет сборку страницы каталога с фильтрацией по поисковой строке.
+     * Проверяет сборку страницы каталога с фильтрацией элементов в памяти по поисковой строке и сортировкой PRICE.
      * </summary>
      **/
     @Test
     void findCatalogShouldReturnFilteredPageWhenSearchIsNotBlank() {
+        var username = "user";
+
         var rawSearch = "novation";
 
         var normalizedSearch = "novation";
 
-        var rawSort = "DEFAULT";
+        var rawSort = "PRICE";
 
         var pageNumber = 1;
 
@@ -287,9 +294,11 @@ public class ItemServiceImplTest {
 
         ReflectionTestUtils.setField(matchingItem, "id", 1L);
 
-        var mockCounts = Map.of(matchingItem.getId(), 1);
+        var nonMatchingItem = new ItemModel("Xiaomi Mi Mix 4", "Phone", "/img2.png", 60000L);
 
-        var pageable = PageRequest.of(0, 5, Sort.unsorted());
+        ReflectionTestUtils.setField(nonMatchingItem, "id", 2L);
+
+        var mockCounts = Map.of(matchingItem.getId(), 1);
 
         Mockito.when(catalogHelper.normalizeSearch(rawSearch)).thenReturn(normalizedSearch);
 
@@ -297,28 +306,79 @@ public class ItemServiceImplTest {
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveSort(Mockito.any())).thenReturn(Sort.unsorted());
+        Mockito.when(catalogHelper.resolveComparator(ItemSortEnumModel.PRICE))
+                .thenReturn(Comparator.comparingLong(ItemModel::getPrice));
 
-        Mockito.when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch, pageable))
-                .thenReturn(Flux.just(matchingItem));
+        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(matchingItem, nonMatchingItem));
 
-        Mockito.when(itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch))
-                .thenReturn(Mono.just(1L));
+        Mockito.when(itemCacheService.findAll(Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        Mockito.when(cartService.findCountsForItems(List.of(1L))).thenReturn(Mono.just(mockCounts));
+        Mockito.when(cartService.findCountsForItems(username, List.of(1L))).thenReturn(Mono.just(mockCounts));
 
         Mockito.when(itemMapper.toRows(List.of(matchingItem), mockCounts)).thenReturn(Collections.emptyList());
 
-        StepVerifier.create(itemService.findCatalog(rawSearch, rawSort, pageNumber, pageSize))
+        StepVerifier.create(itemService.findCatalog(username, rawSearch, rawSort, pageNumber, pageSize))
                 .expectNextMatches(catalogResult ->
-                        catalogResult.search().equals(normalizedSearch)
+                        catalogResult.search().equals(normalizedSearch) &&
+                                catalogResult.sort().equals(ItemSortEnumModel.PRICE.name())
                 )
                 .verifyComplete();
 
         Mockito.verify(catalogHelper, Mockito.times(1)).normalizeSearch(rawSearch);
 
-        Mockito.verify(itemRepository, Mockito.times(1))
-                .findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(normalizedSearch, normalizedSearch, pageable);
+        Mockito.verify(cartService, Mockito.times(1)).findCountsForItems(username, List.of(1L));
+    }
+
+    /**
+     * <summary>
+     * Проверяет правильность определения флагов пагинации (hasPrevious и hasNext) при запросе промежуточной страницы.
+     * </summary>
+     **/
+    @Test
+    void findCatalogShouldSetCorrectPagingFlagsForMiddlePage() {
+        var username = "user";
+
+        var pageNumber = 2;
+
+        var pageSize = 1;
+
+        var item1 = new ItemModel("Item 1", "Desc 1", "/1.png", 100L);
+
+        ReflectionTestUtils.setField(item1, "id", 1L);
+
+        var item2 = new ItemModel("Item 2", "Desc 2", "/2.png", 200L);
+
+        ReflectionTestUtils.setField(item2, "id", 2L);
+
+        var item3 = new ItemModel("Item 3", "Desc 3", "/3.png", 300L);
+
+        ReflectionTestUtils.setField(item3, "id", 3L);
+
+        Mockito.when(catalogHelper.normalizeSearch(Mockito.any())).thenReturn("");
+
+        Mockito.when(catalogHelper.normalizePageNumber(pageNumber)).thenReturn(pageNumber);
+
+        Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
+
+        Mockito.when(catalogHelper.resolveComparator(ItemSortEnumModel.NO)).thenReturn((a, b) -> 0);
+
+        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item1, item2, item3));
+
+        Mockito.when(itemCacheService.findAll(Mockito.any()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Mockito.when(cartService.findCountsForItems(username, List.of(2L))).thenReturn(Mono.just(Map.of(2L, 1)));
+
+        Mockito.when(itemMapper.toRows(List.of(item2), Map.of(2L, 1))).thenReturn(Collections.emptyList());
+
+        StepVerifier.create(itemService.findCatalog(username, null, "NO", pageNumber, pageSize))
+                .expectNextMatches(catalogResult ->
+                        catalogResult.paging().pageNumber() == 2 &&
+                                catalogResult.paging().hasPrevious() &&
+                                catalogResult.paging().hasNext()
+                )
+                .verifyComplete();
     }
 
     // endregion

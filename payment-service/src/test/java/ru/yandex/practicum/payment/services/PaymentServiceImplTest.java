@@ -18,6 +18,12 @@ import ru.yandex.practicum.payment.configurations.properties.PaymentProperties;
 @ExtendWith(MockitoExtension.class)
 public class PaymentServiceImplTest {
 
+    // region Constants
+
+    private static final String TEST_USER = "test-user";
+
+    // endregion
+
     // region Fields
 
     @Mock
@@ -40,7 +46,7 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(initialBalance)
                 .verifyComplete();
     }
@@ -62,7 +68,7 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.pay(amountToPay))
+        StepVerifier.create(paymentService.pay(TEST_USER, amountToPay))
                 .expectNextMatches(result ->
                         result.success() &&
                                 result.balance() == expectedBalance &&
@@ -70,7 +76,7 @@ public class PaymentServiceImplTest {
                 )
                 .verifyComplete();
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(expectedBalance)
                 .verifyComplete();
     }
@@ -90,14 +96,14 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.pay(amountToPay))
+        StepVerifier.create(paymentService.pay(TEST_USER, amountToPay))
                 .expectNextMatches(result ->
                         result.success() &&
                                 result.balance() == 0L
                 )
                 .verifyComplete();
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(0L)
                 .verifyComplete();
     }
@@ -117,15 +123,15 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.pay(amountToPay))
+        StepVerifier.create(paymentService.pay(TEST_USER, amountToPay))
                 .expectNextMatches(result ->
                         !result.success() &&
                                 result.balance() == initialBalance &&
-                                "Недостаточно средств.".equals(result.message())
+                                "Недостаточно средств".equals(result.message())
                 )
                 .verifyComplete();
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(initialBalance)
                 .verifyComplete();
     }
@@ -143,23 +149,23 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.pay(300L))
+        StepVerifier.create(paymentService.pay(TEST_USER, 300L))
                 .expectNextMatches(result -> result.success() && result.balance() == 700L)
                 .verifyComplete();
 
-        StepVerifier.create(paymentService.pay(500L))
+        StepVerifier.create(paymentService.pay(TEST_USER, 500L))
                 .expectNextMatches(result -> result.success() && result.balance() == 200L)
                 .verifyComplete();
 
-        StepVerifier.create(paymentService.pay(300L))
+        StepVerifier.create(paymentService.pay(TEST_USER, 300L))
                 .expectNextMatches(result ->
                         !result.success() &&
                                 result.balance() == 200L &&
-                                "Недостаточно средств.".equals(result.message())
+                                "Недостаточно средств".equals(result.message())
                 )
                 .verifyComplete();
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(200L)
                 .verifyComplete();
     }
@@ -177,14 +183,14 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.pay(0L))
+        StepVerifier.create(paymentService.pay(TEST_USER, 0L))
                 .expectErrorMatches(throwable ->
                         throwable instanceof ResponseStatusException &&
                                 ((ResponseStatusException) throwable).getStatusCode() == HttpStatus.BAD_REQUEST
                 )
                 .verify();
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(initialBalance)
                 .verifyComplete();
     }
@@ -202,16 +208,37 @@ public class PaymentServiceImplTest {
 
         var paymentService = new PaymentServiceImpl(paymentProperties);
 
-        StepVerifier.create(paymentService.pay(-100L))
+        StepVerifier.create(paymentService.pay(TEST_USER, -100L))
                 .expectErrorMatches(throwable ->
                         throwable instanceof ResponseStatusException &&
                                 ((ResponseStatusException) throwable).getStatusCode() == HttpStatus.BAD_REQUEST
                 )
                 .verify();
 
-        StepVerifier.create(paymentService.getBalance())
+        StepVerifier.create(paymentService.getBalance(TEST_USER))
                 .expectNext(initialBalance)
                 .verifyComplete();
+    }
+
+    /**
+     * <summary>
+     * Проверяет возврат ошибки HTTP 400 Bad Request при пустом имени пользователя.
+     * </summary>
+     **/
+    @Test
+    void payShouldReturnBadRequestErrorWhenUsernameIsNullOrFail() {
+        var initialBalance = 1000L;
+
+        Mockito.when(paymentProperties.initialBalance()).thenReturn(initialBalance);
+
+        var paymentService = new PaymentServiceImpl(paymentProperties);
+
+        StepVerifier.create(paymentService.pay(null, 100L))
+                .expectErrorMatches(throwable ->
+                        throwable instanceof ResponseStatusException &&
+                                ((ResponseStatusException) throwable).getStatusCode() == HttpStatus.BAD_REQUEST
+                )
+                .verify();
     }
 
     // endregion

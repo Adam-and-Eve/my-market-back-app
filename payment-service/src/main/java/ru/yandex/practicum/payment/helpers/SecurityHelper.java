@@ -59,7 +59,9 @@ public class SecurityHelper {
             return preferred;
         }
 
-        return jwt.getSubject();
+        var subject = jwt.getSubject();
+
+        return subject != null ? subject : "";
     }
 
     // endregion
