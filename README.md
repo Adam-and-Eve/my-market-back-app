@@ -124,7 +124,7 @@ OpenAPI спецификация используется для генерац�
 Сборка и запуск всех сервисов:
 
 ```bash
-docker-compose up --build -d
+docker compose --profile full up -d
 ```
 
 Проверка статуса запущенных контейнеров:
