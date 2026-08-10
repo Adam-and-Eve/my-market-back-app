@@ -85,7 +85,7 @@ public class CartServiceImpl implements CartService {
     @Transactional(readOnly = true)
     @Override
     public Mono<CartPageViewModel> findCart(final String username) {
-        return findUserId(username)
+        return findUserIdForRead(username)
                 .flatMap(userId -> cartItemRepository.findAllByUserIdOrderByItemIdAsc(userId)
                         .flatMapSequential(cartItem -> itemCacheService.findById(
                                         cartItem.getItemId(),
@@ -97,7 +97,8 @@ public class CartServiceImpl implements CartService {
                         .flatMap(items -> items.isEmpty()
                                 ? Mono.just(cartMapper.toViewModel(items))
                                 : paymentClientService.getBalance().map(payment -> cartMapper.toViewModel(items, payment))
-                        ));
+                        ))
+                .defaultIfEmpty(cartMapper.toViewModel(List.of()));
     }
 
     /**
@@ -111,7 +112,7 @@ public class CartServiceImpl implements CartService {
     @Transactional
     @Override
     public Mono<Void> updateItemCount(final String username, final long itemId, final CartActionEnumModel cartAction) {
-        return findUserId(username)
+        return findUserIdForWrite(username)
                 .flatMap(userId -> switch (cartAction) {
                     case PLUS -> addItem(userId, itemId);
                     case MINUS -> removeOneItem(userId, itemId);
@@ -136,12 +137,13 @@ public class CartServiceImpl implements CartService {
             return Mono.just(Map.of());
         }
 
-        return findUserId(username)
+        return findUserIdForRead(username)
                 .flatMap(userId -> cartItemRepository.findAllByUserIdAndItemIdIn(userId, itemIds)
                         .collectMap(
                                 CartItemModel::getItemId,
                                 CartItemModel::getQuantity
-                        ));
+                        ))
+                .defaultIfEmpty(Map.of());
     }
 
     /**
@@ -157,7 +159,7 @@ public class CartServiceImpl implements CartService {
     @Transactional(readOnly = true)
     @Override
     public Mono<Integer> findCountForItem(final String username, final long itemId) {
-        return findUserId(username)
+        return findUserIdForRead(username)
                 .flatMap(userId ->
                         cartItemRepository.findByUserIdAndItemId(userId, itemId)
                                 .map(CartItemModel::getQuantity)
@@ -211,16 +213,38 @@ public class CartServiceImpl implements CartService {
                 .flatMap(cartItemRepository::delete);
     }
 
-    private Mono<Long> findUserId(String username) {
-        if (username == null ||
-            username.isBlank()) {
+    /**
+     * <summary>
+     * Ищет пользователя для операций чтения. Не создает новую запись в БД.
+     * Если пользователь не найден, возвращает Mono.empty().
+     * </summary>
+     **/
+    private Mono<Long> findUserIdForRead(String username) {
+        if (username == null || username.isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated"));
+        }
+
+        return userService.findByUsername(username)
+                .flatMap(user -> user.getEnabled()
+                        ? Mono.just(user.getId())
+                        : Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "User is disabled")));
+    }
+
+    /**
+     * <summary>
+     * Ищет пользователя для операций изменения корзины.
+     * Если пользователя нет, создает новую активную учетную запись.
+     * </summary>
+     **/
+    private Mono<Long> findUserIdForWrite(String username) {
+        if (username == null || username.isBlank()) {
             return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated"));
         }
 
         return userService.findOrCreateByUsername(username)
-                .filter(UserModel::getEnabled)
-                .map(UserModel::getId)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "User is disabled")));
+                .flatMap(user -> user.getEnabled()
+                        ? Mono.just(user.getId())
+                        : Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "User is disabled")));
     }
 
     // endregion

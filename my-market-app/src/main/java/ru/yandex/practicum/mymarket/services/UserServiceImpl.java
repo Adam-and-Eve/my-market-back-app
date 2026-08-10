@@ -33,6 +33,21 @@ public class UserServiceImpl implements UserService {
 
     /**
      * <summary>
+     * Извлекает учетную запись покупателя из базы данных по его имени пользователя без автоматического создания нового профиля.
+     * </summary>
+     * @param username Имя покупателя для поиска.
+     * <return>
+     * @return Реактивный контейнер Mono с доменной моделью UserModel, или Mono.empty(), если пользователь не найден.
+     * </return>
+     **/
+    @Override
+    @Transactional(readOnly = true)
+    public Mono<UserModel> findByUsername(final String username) {
+        return userRepository.findByUsername(username);
+    }
+
+    /**
+     * <summary>
      * Извлекает учетную запись покупателя по имени пользователя или создает и активирует новую при ее отсутствии.
      * </summary>
      * @param username Имя покупателя.

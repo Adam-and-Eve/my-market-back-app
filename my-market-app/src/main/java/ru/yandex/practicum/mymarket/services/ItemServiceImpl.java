@@ -106,6 +106,7 @@ public class ItemServiceImpl implements ItemService {
     public Mono<ItemViewModel> findById(final String username, final long id) {
         return itemCacheService.findById(id, itemRepository.findById(id))
                 .flatMap(item -> cartService.findCountForItem(username, item.getId())
+                        .defaultIfEmpty(0)
                         .map(count -> itemMapper.toViewModel(item, count)))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found.")));
     }
@@ -157,21 +158,22 @@ public class ItemServiceImpl implements ItemService {
         var normalizedPageNumber = catalogHelper.normalizePageNumber(pageNumber);
         var normalizedPageSize = catalogHelper.normalizePageSize(pageSize);
 
-        var cachedItems = itemCacheService.findAll(itemRepository.findAll());
+        var pageable = PageRequest.of(
+                normalizedPageNumber - 1,
+                normalizedPageSize,
+                catalogHelper.resolveSort(itemSort)
+        );
 
-        var filteredItems = cachedItems
-                .filter(item -> matchesSearch(item, normalizedSearch));
+        var pageItemsMono = itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                normalizedSearch,
+                normalizedSearch,
+                pageable
+        ).collectList();
 
-        var totalCountMono = filteredItems.count();
-
-        var pageItemsMono = filteredItems
-                .collectList()
-                .map(list -> {
-                    list.sort(catalogHelper.resolveComparator(itemSort));
-                    int fromIndex = Math.min((normalizedPageNumber - 1) * normalizedPageSize, list.size());
-                    int toIndex = Math.min(fromIndex + normalizedPageSize, list.size());
-                    return list.subList(fromIndex, toIndex);
-                });
+        var totalCountMono = itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                normalizedSearch,
+                normalizedSearch
+        );
 
         return Mono.zip(pageItemsMono, totalCountMono)
                 .flatMap(tuple -> buildCatalogPage(
