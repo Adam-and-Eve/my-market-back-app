@@ -54,7 +54,7 @@ public class UserModel {
 
     public UserModel(
             final String username,
-            final Boolean enabled
+            final boolean enabled
     ) {
 
         if (username == null || username.isBlank()) {
@@ -120,7 +120,7 @@ public class UserModel {
      * @return Флаг активности учетной записи.
      * </return>
      **/
-    public final Boolean getEnabled() {
+    public final boolean getEnabled() {
         return enabled;
     }
 

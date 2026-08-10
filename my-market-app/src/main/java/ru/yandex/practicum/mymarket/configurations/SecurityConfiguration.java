@@ -32,13 +32,16 @@ public class SecurityConfiguration {
 
     private final ReactiveClientRegistrationRepository clientRegistrationRepository;
 
+    private final ReactiveClientRegistrationRepository logoutClientRegistrationRepository;
+
     // endregion
 
     // region Constructors
 
     /**
      * <summary>
-     * Инициализирует конфигурацию безопасности необходимыми зависимостями.
+     * Инициализирует конфигурацию безопасности необходимыми зависимостями
+     * и создаёт экземпляр оборачивающего репозитория OIDC-logout при старте приложения.
      * </summary>
      * @param keycloakProperties Настройки Keycloak из конфигурации приложения.
      * @param clientRegistrationRepository Репозиторий регистраций OAuth2-клиентов.
@@ -49,6 +52,9 @@ public class SecurityConfiguration {
 
         this.keycloakProperties = keycloakProperties;
         this.clientRegistrationRepository = clientRegistrationRepository;
+        this.logoutClientRegistrationRepository = registrationId ->
+                clientRegistrationRepository.findByRegistrationId(registrationId)
+                        .map(this::withEndSessionEndpoint);
     }
 
     // endregion
@@ -76,7 +82,7 @@ public class SecurityConfiguration {
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .anonymous(Customizer.withDefaults())
                 .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/templates/**","/images/**").permitAll()
+                        .pathMatchers("/templates/**", "/images/**").permitAll()
                         .pathMatchers(HttpMethod.POST, "/items", "/items/*").authenticated()
                         .pathMatchers("/cart/**", "/orders/**", "/buy", "/logout").authenticated()
                         .pathMatchers(HttpMethod.GET, "/", "/items", "/items/*").permitAll()
@@ -93,7 +99,8 @@ public class SecurityConfiguration {
 
     /**
      * <summary>
-     * Создает обработчик успешного завершения сессии OIDC с перенаправлением на главную страницу.
+     * Создает обработчик успешного завершения сессии OIDC с перенаправлением на главную страницу,
+     * используя предсозданный репозиторий logoutClientRegistrationRepository.
      * </summary>
      * <return>
      * @return Обработчик завершения сессии ServerLogoutSuccessHandler.
@@ -102,7 +109,7 @@ public class SecurityConfiguration {
     private ServerLogoutSuccessHandler oidcLogoutSuccessHandler() {
 
         OidcClientInitiatedServerLogoutSuccessHandler successHandler =
-                new OidcClientInitiatedServerLogoutSuccessHandler(oidcLogoutClientRegistrationRepository());
+                new OidcClientInitiatedServerLogoutSuccessHandler(this.logoutClientRegistrationRepository);
 
         successHandler.setPostLogoutRedirectUri("{baseUrl}/");
 
@@ -111,22 +118,7 @@ public class SecurityConfiguration {
 
     /**
      * <summary>
-     * Оборачивает репозиторий регистраций клиентов для подстановки метаданных эндпоинта завершения сессии.
-     * </summary>
-     * <return>
-     * @return Реактивный репозиторий регистраций клиентов с обновленными метаданными.
-     * </return>
-     **/
-    private ReactiveClientRegistrationRepository oidcLogoutClientRegistrationRepository() {
-
-        return registrationId -> clientRegistrationRepository.findByRegistrationId(registrationId)
-                .map(this::withEndSessionEndpoint);
-    }
-
-    /**
-     * <summary>
      * Добавляет эндпоинт выхода из сессии Keycloak в метаданные провайдера клиента.
-     * Содержит защиту от NullPointerException при отсутствии метаданных.
      * </summary>
      * @param clientRegistration Исходный объект регистрации клиента.
      * <return>
