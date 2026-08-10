@@ -98,7 +98,7 @@ public class CartServiceImpl implements CartService {
                                 ? Mono.just(cartMapper.toViewModel(items))
                                 : paymentClientService.getBalance().map(payment -> cartMapper.toViewModel(items, payment))
                         ))
-                .defaultIfEmpty(cartMapper.toViewModel(List.of()));
+                .switchIfEmpty(Mono.fromSupplier(() -> cartMapper.toViewModel(List.of())));
     }
 
     /**

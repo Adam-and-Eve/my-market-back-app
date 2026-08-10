@@ -101,7 +101,7 @@ public class CartServiceImplTest {
 
         ReflectionTestUtils.setField(disabledUser, "id", 1L);
 
-        Mockito.when(userService.findOrCreateByUsername(username)).thenReturn(Mono.just(disabledUser));
+        Mockito.when(userService.findByUsername(username)).thenReturn(Mono.just(disabledUser));
 
         StepVerifier.create(cartService.findCart(username))
                 .expectErrorMatches(throwable ->
@@ -109,6 +109,8 @@ public class CartServiceImplTest {
                                 ((ResponseStatusException) throwable).getStatusCode().equals(HttpStatus.FORBIDDEN)
                 )
                 .verify();
+
+        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
 
         Mockito.verifyNoInteractions(cartItemRepository);
     }
@@ -133,11 +135,11 @@ public class CartServiceImplTest {
 
         ReflectionTestUtils.setField(user, "id", userId);
 
-        Mockito.when(userService.findOrCreateByUsername(username)).thenReturn(Mono.just(user));
+        Mockito.when(userService.findByUsername(username)).thenReturn(Mono.just(user));
 
         Mockito.when(cartItemRepository.findAllByUserIdOrderByItemIdAsc(userId)).thenReturn(Flux.empty());
 
-        Mockito.when(cartMapper.toViewModel(Collections.emptyList()))
+        Mockito.when(cartMapper.toViewModel(Mockito.anyList()))
                 .thenReturn(new CartPageViewModel(Collections.emptyList(), 0L));
 
         StepVerifier.create(cartService.findCart(username))
@@ -145,6 +147,10 @@ public class CartServiceImplTest {
                         cartPage.items().isEmpty() && cartPage.total() == 0L
                 )
                 .verifyComplete();
+
+        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(cartItemRepository, Mockito.times(1)).findAllByUserIdOrderByItemIdAsc(userId);
 
         Mockito.verifyNoInteractions(paymentClientService);
     }
@@ -179,7 +185,7 @@ public class CartServiceImplTest {
 
         var paymentAvailability = Mockito.mock(PaymentAvailabilityViewModel.class);
 
-        Mockito.when(userService.findOrCreateByUsername(username)).thenReturn(Mono.just(user));
+        Mockito.when(userService.findByUsername(username)).thenReturn(Mono.just(user));
 
         Mockito.when(cartItemRepository.findAllByUserIdOrderByItemIdAsc(userId)).thenReturn(Flux.just(cartItem));
 
@@ -198,6 +204,8 @@ public class CartServiceImplTest {
                                 cartPage.items().getFirst().title().equals("Novation Launchkey 88")
                 )
                 .verifyComplete();
+
+        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
 
         Mockito.verify(paymentClientService, Mockito.times(1)).getBalance();
     }
@@ -465,7 +473,7 @@ public class CartServiceImplTest {
 
         var cartItem2 = new CartItemModel(userId, itemId2, 5);
 
-        Mockito.when(userService.findOrCreateByUsername(username)).thenReturn(Mono.just(user));
+        Mockito.when(userService.findByUsername(username)).thenReturn(Mono.just(user));
 
         Mockito.when(cartItemRepository.findAllByUserIdAndItemIdIn(userId, itemIds)).thenReturn(Flux.just(cartItem1, cartItem2));
 
@@ -474,6 +482,10 @@ public class CartServiceImplTest {
                         resultMap.size() == 2 && resultMap.get(itemId1) == 2 && resultMap.get(itemId2) == 5
                 )
                 .verifyComplete();
+
+        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(cartItemRepository, Mockito.times(1)).findAllByUserIdAndItemIdIn(userId, itemIds);
     }
 
     /**
@@ -509,13 +521,17 @@ public class CartServiceImplTest {
 
         var cartItem = new CartItemModel(userId, itemId, 4);
 
-        Mockito.when(userService.findOrCreateByUsername(username)).thenReturn(Mono.just(user));
+        Mockito.when(userService.findByUsername(username)).thenReturn(Mono.just(user));
 
         Mockito.when(cartItemRepository.findByUserIdAndItemId(userId, itemId)).thenReturn(Mono.just(cartItem));
 
         StepVerifier.create(cartService.findCountForItem(username, itemId))
                 .expectNext(4)
                 .verifyComplete();
+
+        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(cartItemRepository, Mockito.times(1)).findByUserIdAndItemId(userId, itemId);
     }
 
     /**
@@ -526,19 +542,26 @@ public class CartServiceImplTest {
     @Test
     void findCountForItemShouldReturnZeroWhenItemDoesNotExist() {
         var username = "user";
+
         var userId = 1L;
+
         var itemId = 5L;
 
         var user = new UserModel(username, true);
+
         ReflectionTestUtils.setField(user, "id", userId);
 
-        Mockito.when(userService.findOrCreateByUsername(username)).thenReturn(Mono.just(user));
+        Mockito.when(userService.findByUsername(username)).thenReturn(Mono.just(user));
 
         Mockito.when(cartItemRepository.findByUserIdAndItemId(userId, itemId)).thenReturn(Mono.empty());
 
         StepVerifier.create(cartService.findCountForItem(username, itemId))
                 .expectNext(0)
                 .verifyComplete();
+
+        Mockito.verify(userService, Mockito.times(1)).findByUsername(username);
+
+        Mockito.verify(cartItemRepository, Mockito.times(1)).findByUserIdAndItemId(userId, itemId);
     }
 
     // endregion

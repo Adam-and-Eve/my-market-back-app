@@ -216,7 +216,7 @@ public class ItemServiceImplTest {
 
     /**
      * <summary>
-     * Проверяет сборку нефильтрованной страницы каталога из кэша с расчетом количества элементов в корзине пользователя.
+     * Проверяет сборку нефильтрованной страницы каталога с выполнением запросов к базе данных и расчетом количества элементов в корзине пользователя.
      * </summary>
      **/
     @Test
@@ -239,18 +239,25 @@ public class ItemServiceImplTest {
 
         var mockCounts = Map.of(item.getId(), 2);
 
+        var sort = Sort.unsorted();
+
+        var pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
+
         Mockito.when(catalogHelper.normalizeSearch(rawSearch)).thenReturn(normalizedSearch);
 
         Mockito.when(catalogHelper.normalizePageNumber(pageNumber)).thenReturn(pageNumber);
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveComparator(ItemSortEnumModel.NO)).thenReturn((a, b) -> 0);
+        Mockito.when(catalogHelper.resolveSort(ItemSortEnumModel.NO)).thenReturn(sort);
 
-        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item));
+        Mockito.when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                normalizedSearch, normalizedSearch, pageable
+        )).thenReturn(Flux.just(item));
 
-        Mockito.when(itemCacheService.findAll(Mockito.any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.when(itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                normalizedSearch, normalizedSearch
+        )).thenReturn(Mono.just(1L));
 
         Mockito.when(cartService.findCountsForItems(username, List.of(1L))).thenReturn(Mono.just(mockCounts));
 
@@ -267,6 +274,8 @@ public class ItemServiceImplTest {
                 .verifyComplete();
 
         Mockito.verify(catalogHelper, Mockito.times(1)).normalizeSearch(rawSearch);
+
+        Mockito.verify(catalogHelper, Mockito.times(1)).resolveSort(ItemSortEnumModel.NO);
 
         Mockito.verify(cartService, Mockito.times(1)).findCountsForItems(username, List.of(1L));
     }
@@ -294,11 +303,11 @@ public class ItemServiceImplTest {
 
         ReflectionTestUtils.setField(matchingItem, "id", 1L);
 
-        var nonMatchingItem = new ItemModel("Xiaomi Mi Mix 4", "Phone", "/img2.png", 60000L);
-
-        ReflectionTestUtils.setField(nonMatchingItem, "id", 2L);
-
         var mockCounts = Map.of(matchingItem.getId(), 1);
+
+        var sort = Sort.by("price").ascending();
+
+        var pageable = PageRequest.of(0, pageSize, sort);
 
         Mockito.when(catalogHelper.normalizeSearch(rawSearch)).thenReturn(normalizedSearch);
 
@@ -306,13 +315,15 @@ public class ItemServiceImplTest {
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveComparator(ItemSortEnumModel.PRICE))
-                .thenReturn(Comparator.comparingLong(ItemModel::getPrice));
+        Mockito.when(catalogHelper.resolveSort(ItemSortEnumModel.PRICE)).thenReturn(sort);
 
-        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(matchingItem, nonMatchingItem));
+        Mockito.when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                normalizedSearch, normalizedSearch, pageable
+        )).thenReturn(Flux.just(matchingItem));
 
-        Mockito.when(itemCacheService.findAll(Mockito.any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.when(itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                normalizedSearch, normalizedSearch
+        )).thenReturn(Mono.just(1L));
 
         Mockito.when(cartService.findCountsForItems(username, List.of(1L))).thenReturn(Mono.just(mockCounts));
 
@@ -327,12 +338,15 @@ public class ItemServiceImplTest {
 
         Mockito.verify(catalogHelper, Mockito.times(1)).normalizeSearch(rawSearch);
 
+        Mockito.verify(catalogHelper, Mockito.times(1)).resolveSort(ItemSortEnumModel.PRICE);
+
         Mockito.verify(cartService, Mockito.times(1)).findCountsForItems(username, List.of(1L));
     }
 
     /**
      * <summary>
      * Проверяет правильность определения флагов пагинации (hasPrevious и hasNext) при запросе промежуточной страницы.
+     * Запросы выборок и подсчета общего количества записей делегируются в базу данных.
      * </summary>
      **/
     @Test
@@ -343,17 +357,13 @@ public class ItemServiceImplTest {
 
         var pageSize = 1;
 
-        var item1 = new ItemModel("Item 1", "Desc 1", "/1.png", 100L);
-
-        ReflectionTestUtils.setField(item1, "id", 1L);
-
         var item2 = new ItemModel("Item 2", "Desc 2", "/2.png", 200L);
 
         ReflectionTestUtils.setField(item2, "id", 2L);
 
-        var item3 = new ItemModel("Item 3", "Desc 3", "/3.png", 300L);
+        var sort = Sort.unsorted();
 
-        ReflectionTestUtils.setField(item3, "id", 3L);
+        var pageable = PageRequest.of(pageNumber - 1, pageSize, sort);
 
         Mockito.when(catalogHelper.normalizeSearch(Mockito.any())).thenReturn("");
 
@@ -361,12 +371,15 @@ public class ItemServiceImplTest {
 
         Mockito.when(catalogHelper.normalizePageSize(pageSize)).thenReturn(pageSize);
 
-        Mockito.when(catalogHelper.resolveComparator(ItemSortEnumModel.NO)).thenReturn((a, b) -> 0);
+        Mockito.when(catalogHelper.resolveSort(ItemSortEnumModel.NO)).thenReturn(sort);
 
-        Mockito.when(itemRepository.findAll()).thenReturn(Flux.just(item1, item2, item3));
+        Mockito.when(itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                "", "", pageable
+        )).thenReturn(Flux.just(item2));
 
-        Mockito.when(itemCacheService.findAll(Mockito.any()))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.when(itemRepository.countByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+                "", ""
+        )).thenReturn(Mono.just(3L));
 
         Mockito.when(cartService.findCountsForItems(username, List.of(2L))).thenReturn(Mono.just(Map.of(2L, 1)));
 
@@ -379,6 +392,10 @@ public class ItemServiceImplTest {
                                 catalogResult.paging().hasNext()
                 )
                 .verifyComplete();
+
+        Mockito.verify(catalogHelper, Mockito.times(1)).resolveSort(ItemSortEnumModel.NO);
+
+        Mockito.verify(cartService, Mockito.times(1)).findCountsForItems(username, List.of(2L));
     }
 
     // endregion
