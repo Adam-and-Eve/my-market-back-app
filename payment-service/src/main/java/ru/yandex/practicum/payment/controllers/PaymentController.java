@@ -1,5 +1,6 @@
 package ru.yandex.practicum.payment.controllers;
 
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ServerWebExchange;
@@ -10,6 +11,7 @@ import ru.yandex.practicum.payment.generated.model.PaymentRequest;
 import ru.yandex.practicum.payment.generated.model.PaymentResponse;
 
 import org.springframework.web.bind.annotation.RestController;
+import ru.yandex.practicum.payment.helpers.SecurityHelper;
 import ru.yandex.practicum.payment.interfaces.PaymentService;
 
 /**
@@ -23,13 +25,18 @@ public class PaymentController implements PaymentsApi {
     // region Fields
 
     private final PaymentService paymentService;
+    private final SecurityHelper securityHelper;
 
     // endregion
 
     // region Constructors
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(
+            final PaymentService paymentService,
+            final SecurityHelper securityHelper) {
+
         this.paymentService = paymentService;
+        this.securityHelper = securityHelper;
     }
 
     // endregion
@@ -46,8 +53,9 @@ public class PaymentController implements PaymentsApi {
      * </return>
      **/
     @Override
-    public Mono<ResponseEntity<BalanceResponse>> getBalance(ServerWebExchange exchange) {
-        return paymentService.getBalance()
+    public Mono<ResponseEntity<BalanceResponse>> getBalance(final ServerWebExchange exchange) {
+        return securityHelper.currentUsername()
+                .flatMap(paymentService::getBalance)
                 .map(balance -> ResponseEntity.ok(new BalanceResponse(balance)));
     }
 
@@ -63,16 +71,20 @@ public class PaymentController implements PaymentsApi {
      **/
     @Override
     public Mono<ResponseEntity<PaymentResponse>> pay(
-            Mono<PaymentRequest> paymentRequest,
-            ServerWebExchange exchange
+            final Mono<PaymentRequest> paymentRequest,
+            final ServerWebExchange exchange
     ) {
-        return paymentRequest
-                .flatMap(request -> paymentService.pay(request.getAmount()))
+        return securityHelper.currentUsername()
+                .flatMap(username -> paymentRequest.flatMap(req ->
+                        paymentService.pay(username, req.getAmount())
+                ))
                 .map(result -> {
-                    PaymentResponse response = new PaymentResponse(result.success(), result.balance())
+                    PaymentResponse body = new PaymentResponse(result.success(), result.balance())
                             .message(result.message());
-                    HttpStatus status = result.success() ? HttpStatus.OK : HttpStatus.CONFLICT;
-                    return ResponseEntity.status(status).body(response);
+
+                    var status = result.success() ? HttpStatus.OK : HttpStatus.CONFLICT;
+
+                    return ResponseEntity.status(status).body(body);
                 });
     }
 

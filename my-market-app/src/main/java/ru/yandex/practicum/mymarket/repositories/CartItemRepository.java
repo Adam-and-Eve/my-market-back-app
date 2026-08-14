@@ -19,37 +19,32 @@ public interface CartItemRepository extends ReactiveCrudRepository<CartItemModel
 
     /**
      * <summary>
-     * Выполняет поиск элемента корзины по уникальному идентификатору связанного с ним товара.
-     * </summary>
-     * @param itemId Уникальный идентификатор товара.
-     * <return>
-     * @return Контейнер Optional, содержащий сущность элемента корзины, если она найдена, иначе Optional.empty().
-     * </return>
-     **/
-    Mono<CartItemModel> findByItemId(final long itemId);
-
-    /**
-     * <summary>
-     * Выполняет пакетную выборку элементов корзины для переданного списка идентификаторов товаров.
+     * Выполняет пакетную выборку элементов корзины пользователя для переданной коллекции идентификаторов товаров.
      * Используется для оптимизации запросов и предотвращения проблемы N+1 при пагинации каталога.
      * </summary>
+     * @param userId Идентификатор покупателя.
      * @param itemIds Коллекция идентификаторов интересующих товаров.
      * <return>
-     * @return Список доменных моделей элементов корзины, соответствующих переданным идентификаторам.
+     * @return Реактивный поток Flux с доменными моделями элементов корзины, соответствующих переданным идентификаторам.
      * </return>
      **/
-    Flux<CartItemModel> findAllByItemIdIn(Collection<Long> itemIds);
+    Flux<CartItemModel> findAllByUserIdAndItemIdIn(final long userId, final Collection<Long> itemIds);
 
     /**
      * <summary>
-     * Выполняет выборку всех элементов корзины с сортировкой по возрастанию идентификатора товара.
+     * Выполняет выборку всех элементов корзины пользователя с сортировкой по возрастанию идентификатора товара.
      * Используется для обеспечения стабильного порядка отображения позиций в UI при изменении их количества.
      * </summary>
+     * @param userId Идентификатор покупателя.
      * <return>
-     * @return Список доменных моделей всех элементов корзины, упорядоченных по ID товара.
+     * @return Реактивный поток Flux с доменными моделями всех элементов корзины пользователя, упорядоченных по ID товара.
      * </return>
      **/
-    Flux<CartItemModel> findAllByOrderByItemIdAsc();
+    Flux<CartItemModel> findAllByUserIdOrderByItemIdAsc(final long userId);
+
+    Mono<CartItemModel> findByUserIdAndItemId(
+            long userId,
+            long itemId);
 
     // endregion
 }

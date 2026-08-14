@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.services;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.client.ClientAuthorizationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -27,11 +28,6 @@ public class PaymentClientServiceImpl implements PaymentClientService {
     // region Fields
 
     /**
-     * Сгенерированный реактивный API-клиент для отправки HTTP-запросов к платежному сервису.
-     **/
-    private final PaymentsApi paymentsApi;
-
-    /**
      * Компонент для десериализации тела HTTP-ошибок в типизированные объекты ответов шлюза.
      **/
     private final ObjectMapper objectMapper;
@@ -46,20 +42,25 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      **/
     private final PaymentHelper paymentHelper;
 
+    /**
+     * Клиент API платежного сервиса для выполнения сетевых запросов к удаленному шлюзу.
+     **/
+    private final PaymentsApi paymentsApi;
+
     // endregion
 
     // region Constructors
 
     public PaymentClientServiceImpl(
-            final PaymentsApi paymentsApi,
             final ObjectMapper objectMapper,
             final PaymentMapper paymentMapper,
-            final PaymentHelper paymentHelper) {
+            final PaymentHelper paymentHelper,
+            final PaymentsApi paymentsApi) {
 
-        this.paymentsApi = paymentsApi;
         this.objectMapper = objectMapper;
         this.paymentMapper = paymentMapper;
         this.paymentHelper = paymentHelper;
+        this.paymentsApi = paymentsApi;
     }
 
     // endregion
@@ -76,7 +77,8 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      **/
     public Mono<PaymentAvailabilityViewModel> getBalance() {
         return paymentsApi.getBalance()
-                .map(paymentMapper::toAvailabilityViewModel)
+                .map(response -> PaymentAvailabilityViewModel.available(response.getBalance()))
+                .onErrorResume(ClientAuthorizationException.class, this::handleBalanceAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handleBalanceResponseError)
                 .onErrorResume(WebClientRequestException.class, this::handleBalanceRequestError);
     }
@@ -89,8 +91,11 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      * <return>
      * @return Реактивный контейнер Mono с детализированным результатом проведения платежа.
      * </return>
+     * @throws ResponseStatusException Если переданная сумма платежа меньше или равна нулю (HTTP 400).
      **/
-    public Mono<OrderPaymentResultViewModel> pay(final long amount) {
+    public Mono<OrderPaymentResultViewModel> pay(
+            long amount) {
+
         if (amount <= 0) {
             return Mono.error(new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -102,8 +107,23 @@ public class PaymentClientServiceImpl implements PaymentClientService {
 
         return paymentsApi.pay(request)
                 .map(paymentMapper::toOrderPaymentResultViewModel)
+                .onErrorResume(ClientAuthorizationException.class, this::handlePaymentAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)
                 .onErrorResume(WebClientRequestException.class, this::handlePaymentRequestError);
+    }
+
+    /**
+     * <summary>
+     * Обрабатывает ошибки авторизации и аутентификации клиента (OAuth2) при запросе баланса.
+     * </summary>
+     * @param error Исключение авторизации клиента.
+     * <return>
+     * @return Реактивный контейнер Mono с моделью недоступности сервиса.
+     * </return>
+     **/
+    private Mono<PaymentAvailabilityViewModel> handleBalanceAuthorizationError(ClientAuthorizationException error) {
+        return Mono.just(PaymentAvailabilityViewModel.unavailable(
+                paymentHelper.resolveServiceUnavailableMessage()));
     }
 
     /**
@@ -115,8 +135,9 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      * @return Реактивный контейнер Mono с моделью недоступности сервиса.
      * </return>
      **/
-    private Mono<PaymentAvailabilityViewModel> handleBalanceRequestError(final WebClientRequestException error) {
-        return Mono.just(PaymentAvailabilityViewModel.unavailable(paymentHelper.resolveServiceUnavailableMessage()));
+    private Mono<PaymentAvailabilityViewModel> handleBalanceRequestError(WebClientRequestException error) {
+        return Mono.just(PaymentAvailabilityViewModel.unavailable(
+                paymentHelper.resolveServiceUnavailableMessage()));
     }
 
     /**
@@ -128,8 +149,9 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      * @return Реактивный контейнер Mono с моделью недоступности сервиса.
      * </return>
      **/
-    private Mono<PaymentAvailabilityViewModel> handleBalanceResponseError(final WebClientResponseException error) {
-        return Mono.just(PaymentAvailabilityViewModel.unavailable(paymentHelper.resolveServiceUnavailableMessage()));
+    private Mono<PaymentAvailabilityViewModel> handleBalanceResponseError(WebClientResponseException error) {
+        return Mono.just(PaymentAvailabilityViewModel.unavailable(
+                paymentHelper.resolveServiceUnavailableMessage()));
     }
 
     /**
@@ -141,8 +163,23 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      * @return Реактивный контейнер Mono с результатом недоступности сервиса оплаты.
      * </return>
      **/
-    private Mono<OrderPaymentResultViewModel> handlePaymentRequestError(final WebClientRequestException error) {
-        return Mono.just(OrderPaymentResultViewModel.unavailable(paymentHelper.resolveServiceUnavailableMessage()));
+    private Mono<OrderPaymentResultViewModel> handlePaymentRequestError(WebClientRequestException error) {
+        return Mono.just(OrderPaymentResultViewModel.unavailable(
+                paymentHelper.resolveServiceUnavailableMessage()));
+    }
+
+    /**
+     * <summary>
+     * Обрабатывает ошибки авторизации и аутентификации клиента (OAuth2) в процессе проведения транзакции оплаты.
+     * </summary>
+     * @param error Исключение авторизации клиента.
+     * <return>
+     * @return Реактивный контейнер Mono с результатом недоступности сервиса оплаты.
+     * </return>
+     **/
+    private Mono<OrderPaymentResultViewModel> handlePaymentAuthorizationError(ClientAuthorizationException error) {
+        return Mono.just(OrderPaymentResultViewModel.unavailable(
+                paymentHelper.resolveServiceUnavailableMessage()));
     }
 
     /**
@@ -155,11 +192,13 @@ public class PaymentClientServiceImpl implements PaymentClientService {
      * @return Реактивный контейнер Mono с моделью результата проведения платежа.
      * </return>
      **/
-    private Mono<OrderPaymentResultViewModel> handlePaymentError(final WebClientResponseException error) {
+    private Mono<OrderPaymentResultViewModel> handlePaymentError(WebClientResponseException error) {
         if (error.getStatusCode() == HttpStatus.CONFLICT) {
             return Mono.just(paymentMapper.toOrderPaymentResultViewModel(parsePaymentResponse(error)));
         }
-        return Mono.just(OrderPaymentResultViewModel.unavailable(paymentHelper.resolveServiceUnavailableMessage()));
+
+        return Mono.just(OrderPaymentResultViewModel.unavailable(
+                paymentHelper.resolveServiceUnavailableMessage()));
     }
 
     /**
@@ -178,7 +217,7 @@ public class PaymentClientServiceImpl implements PaymentClientService {
             return new PaymentResponse()
                     .success(false)
                     .balance(0L)
-                    .message(null);
+                    .message(paymentHelper.resolveDefaultRejectedMessage());
         }
     }
 

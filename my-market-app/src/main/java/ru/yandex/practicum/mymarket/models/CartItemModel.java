@@ -1,6 +1,7 @@
 package ru.yandex.practicum.mymarket.models;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
@@ -23,6 +24,12 @@ public class CartItemModel {
     @Id
     @Column("id")
     private Long id;
+
+    /**
+     * Уникальный идентификатор покупателя в базе данных.
+     **/
+    @Column("user_id")
+    private Long userId;
 
     /**
      * Уникальный идентификатор записи связанного элемента товара в базе данных.
@@ -50,7 +57,9 @@ public class CartItemModel {
 
     }
 
-    public CartItemModel(final ItemModel item, final int quantity) {
+    public CartItemModel(
+            final ItemModel item,
+            final int quantity) {
 
         if (item == null) {
             throw new IllegalArgumentException("Модель товара не может быть null");
@@ -65,15 +74,53 @@ public class CartItemModel {
         this.quantity = quantity;
     }
 
-    public CartItemModel(final Long itemId, final int quantity) {
+    public CartItemModel(
+            final Long userId,
+            final Long itemId,
+            final int quantity) {
+
+        if (userId == null) {
+            throw new IllegalArgumentException("Идентификатор покупателя не может быть null");
+        }
 
         if (itemId == null) {
             throw new IllegalArgumentException("Идентификатор товара не может быть null");
         }
+
         if (quantity < 0) {
             throw new IllegalArgumentException("Количество товара в корзине не может быть отрицательным");
         }
 
+        this.userId = userId;
+        this.itemId = itemId;
+        this.quantity = quantity;
+    }
+
+    @PersistenceCreator
+    public CartItemModel(
+            final Long id,
+            final Long userId,
+            final Long itemId,
+            final int quantity) {
+
+        if (id == null) {
+            throw new IllegalArgumentException("Идентификатор элемента корзины не может быть null");
+        }
+
+        if (userId == null) {
+            throw new IllegalArgumentException("Идентификатор покупателя не может быть null");
+        }
+
+        if (itemId == null) {
+            throw new IllegalArgumentException("Идентификатор товара не может быть null");
+        }
+
+        if (quantity < 0) {
+            throw new IllegalArgumentException("Количество товара в корзине не может быть отрицательным");
+        }
+
+        this.id = id;
+        this.userId = userId;
         this.itemId = itemId;
         this.quantity = quantity;
     }
@@ -92,6 +139,18 @@ public class CartItemModel {
      **/
     public Long getId() {
         return id;
+    }
+
+    /**
+     * <summary>
+     * Возвращает уникальный идентификатор покупателя элемента корзины в базе данных.
+     * </summary>
+     * <return>
+     * @return Уникальный идентификатор покупателя элемента корзины в базе данных.
+     * </return>
+     **/
+    public Long getUserId() {
+        return userId;
     }
 
     /**

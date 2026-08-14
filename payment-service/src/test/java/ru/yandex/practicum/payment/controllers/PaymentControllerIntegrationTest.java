@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
@@ -18,6 +19,12 @@ import ru.yandex.practicum.payment.viewmodels.PaymentResultViewModel;
  * </summary>
  **/
 public class PaymentControllerIntegrationTest extends PaymentServiceApplicationTests {
+
+    // region Constants
+
+    private static final String TEST_USER = "test-user";
+
+    // endregion
 
     // region Fields
 
@@ -37,21 +44,23 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
     public void getBalanceShouldReturn200OKAndCurrentBalance() {
         var currentBalance = 1500L;
 
-        Mockito.when(paymentService.getBalance()).thenReturn(Mono.just(currentBalance));
+        Mockito.when(paymentService.getBalance(TEST_USER)).thenReturn(Mono.just(currentBalance));
 
-        webTestClient.get().uri("/payments/balance")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockJwt().jwt(jwt -> jwt.subject(TEST_USER)))
+                .get().uri("/payments/balance")
                 .exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentType(MediaType.APPLICATION_JSON)
                 .expectBody()
                 .jsonPath("$.balance").isEqualTo(currentBalance);
 
-        Mockito.verify(paymentService, Mockito.times(1)).getBalance();
+        Mockito.verify(paymentService, Mockito.times(1)).getBalance(TEST_USER);
     }
 
     /**
      * <summary>
-     * Проверяет успешную проведение операции оплаты (HTTP 200 OK) при достаточном количестве средств.
+     * Проверяет успешное проведение операции оплаты (HTTP 200 OK) при достаточном количестве средств.
      * </summary>
      **/
     @Test
@@ -62,11 +71,13 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
 
         var successResult = PaymentResultViewModel.success(remainingBalance);
 
-        Mockito.when(paymentService.pay(payAmount)).thenReturn(Mono.just(successResult));
+        Mockito.when(paymentService.pay(TEST_USER, payAmount)).thenReturn(Mono.just(successResult));
 
         var requestBody = new PaymentRequest(payAmount);
 
-        webTestClient.post().uri("/payments/pay")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockJwt().jwt(jwt -> jwt.subject(TEST_USER)))
+                .post().uri("/payments/pay")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .exchange()
@@ -77,7 +88,7 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
                 .jsonPath("$.balance").isEqualTo(remainingBalance)
                 .jsonPath("$.message").isEqualTo(null);
 
-        Mockito.verify(paymentService, Mockito.times(1)).pay(payAmount);
+        Mockito.verify(paymentService, Mockito.times(1)).pay(TEST_USER, payAmount);
     }
 
     /**
@@ -88,16 +99,20 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
     @Test
     public void payShouldReturn409ConflictWhenInsufficientFunds() {
         var payAmount = 2000L;
+
         var currentBalance = 300L;
-        var errorMessage = "Недостаточно средств.";
+
+        var errorMessage = "Недостаточно средств";
 
         var failedResult = PaymentResultViewModel.failed(currentBalance, errorMessage);
 
-        Mockito.when(paymentService.pay(payAmount)).thenReturn(Mono.just(failedResult));
+        Mockito.when(paymentService.pay(TEST_USER, payAmount)).thenReturn(Mono.just(failedResult));
 
         var requestBody = new PaymentRequest(payAmount);
 
-        webTestClient.post().uri("/payments/pay")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockJwt().jwt(jwt -> jwt.subject(TEST_USER)))
+                .post().uri("/payments/pay")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .exchange()
@@ -108,7 +123,7 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
                 .jsonPath("$.balance").isEqualTo(currentBalance)
                 .jsonPath("$.message").isEqualTo(errorMessage);
 
-        Mockito.verify(paymentService, Mockito.times(1)).pay(payAmount);
+        Mockito.verify(paymentService, Mockito.times(1)).pay(TEST_USER, payAmount);
     }
 
     /**
@@ -122,12 +137,14 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
 
         var errorMessage = "Сумма платежа должна быть больше нуля";
 
-        Mockito.when(paymentService.pay(Mockito.anyLong()))
+        Mockito.when(paymentService.pay(Mockito.eq(TEST_USER), Mockito.anyLong()))
                 .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)));
 
         var requestBody = new PaymentRequest(payAmount);
 
-        webTestClient.post().uri("/payments/pay")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockJwt().jwt(jwt -> jwt.subject(TEST_USER)))
+                .post().uri("/payments/pay")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .exchange()
@@ -145,12 +162,14 @@ public class PaymentControllerIntegrationTest extends PaymentServiceApplicationT
 
         var errorMessage = "Сумма платежа должна быть больше нуля";
 
-        Mockito.when(paymentService.pay(Mockito.anyLong()))
+        Mockito.when(paymentService.pay(Mockito.eq(TEST_USER), Mockito.anyLong()))
                 .thenReturn(Mono.error(new ResponseStatusException(HttpStatus.BAD_REQUEST, errorMessage)));
 
         var requestBody = new PaymentRequest(payAmount);
 
-        webTestClient.post().uri("/payments/pay")
+        webTestClient
+                .mutateWith(SecurityMockServerConfigurers.mockJwt().jwt(jwt -> jwt.subject(TEST_USER)))
+                .post().uri("/payments/pay")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestBody)
                 .exchange()

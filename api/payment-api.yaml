@@ -12,8 +12,7 @@ tags:
 paths:
   /payments/balance:
     get:
-      tags:
-        - payments
+      tags: [payments]
       operationId: getBalance
       summary: Получить текущий баланс
       responses:
@@ -23,6 +22,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalanceResponse'
+        '401':
+          description: Не авторизован
         '503':
           description: Сервис платежей временно недоступен
           content:
@@ -31,8 +32,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
   /payments/pay:
     post:
-      tags:
-        - payments
+      tags: [payments]
       operationId: pay
       summary: Выполнить платёж
       requestBody:
@@ -54,8 +54,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Не авторизован
         '409':
-          description: Недостаточно средств для выполнения платежа
+          description: Недостаточно средств
           content:
             application/json:
               schema:
@@ -70,8 +72,7 @@ components:
   schemas:
     BalanceResponse:
       type: object
-      required:
-        - balance
+      required: [balance]
       properties:
         balance:
           type: integer
@@ -80,8 +81,7 @@ components:
           example: 10000
     PaymentRequest:
       type: object
-      required:
-        - amount
+      required: [amount]
       properties:
         amount:
           type: integer
@@ -90,9 +90,7 @@ components:
           example: 2500
     PaymentResponse:
       type: object
-      required:
-        - success
-        - balance
+      required: [success, balance]
       properties:
         success:
           type: boolean
@@ -107,8 +105,7 @@ components:
           example: Недостаточно средств
     ErrorResponse:
       type: object
-      required:
-        - message
+      required: [message]
       properties:
         message:
           type: string

@@ -10,6 +10,8 @@ import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.interfaces.OrderService;
 import ru.yandex.practicum.mymarket.interfaces.PurchaseService;
 
+import java.security.Principal;
+
 /**
  * <summary>
  * Веб-контроллер, обрабатывающий пользовательские HTTP-запросы для взаимодействия с заказами.
@@ -25,6 +27,9 @@ public class OrderController {
      **/
     private final OrderService orderService;
 
+    /**
+     * Сервис для обработки транзакций покупки и проведения оплаты.
+     **/
     private final PurchaseService purchaseService;
 
     // endregion
@@ -48,13 +53,16 @@ public class OrderController {
      * Обрабатывает GET-запрос на получение и отображение страницы со списком всех оформленных заказов.
      * </summary>
      * @param model Контейнер Spring MVC для передачи коллекции заказов в шаблон отображения.
+     * @param principal Объект текущего аутентифицированного пользователя Spring Security.
      * <return>
-     * @return Имя HTML-шаблона "orders" для рендеринга страницы журнала заказов.
+     * @return Реактивный контейнер Mono с логическим именем HTML-шаблона ("orders").
      * </return>
      **/
     @GetMapping("/orders")
-    public Mono<String> getOrders(Model model) {
-        return orderService.findAll()
+    public Mono<String> getOrders(
+            final Model model,
+            final Principal principal) {
+        return orderService.findAll(username(principal))
                 .collectList()
                 .doOnNext(orders -> {
                     model.addAttribute("orders", orders);
@@ -69,17 +77,19 @@ public class OrderController {
      * @param id Уникальный идентификатор запрашиваемого заказа.
      * @param newOrder Флаг, указывающий, является ли этот заказ только что оформленным (для вывода приветственного сообщения).
      * @param model Контейнер Spring MVC для передачи атрибутов в шаблон отображения.
+     * @param principal Объект текущего аутентифицированного пользователя Spring Security.
      * <return>
-     * @return Имя HTML-шаблона "order" для рендеринга страницы заказа.
+     * @return Реактивный контейнер Mono с логическим именем HTML-шаблона ("order").
      * </return>
      **/
     @GetMapping("/orders/{id}")
     public Mono<String> getOrder(
             @PathVariable final long id,
             @RequestParam(defaultValue = "false") final boolean newOrder,
-            Model model
+            final Model model,
+            final Principal principal
     ){
-        return orderService.findById(id)
+        return orderService.findById(username(principal), id)
                 .doOnNext(order -> {
                     model.addAttribute("order", order);
                     model.addAttribute("newOrder", newOrder);
@@ -93,13 +103,14 @@ public class OrderController {
      * Анализирует результат выполнения покупки (успех, пустая корзина или отказ оплаты)
      * и осуществляет соответствующий редирект.
      * </summary>
+     * @param principal Объект текущего аутентифицированного пользователя Spring Security.
      * <return>
-     * @return Редирект на страницу созданного заказа при успехе, либо на страницу корзины с соответствующими параметрами.
+     * @return Реактивный контейнер Mono со строкой перенаправления (redirect) на страницу заказа или корзины.
      * </return>
      **/
     @PostMapping("/buy")
-    public Mono<String> buy() {
-        return purchaseService.buy()
+    public Mono<String> buy(final Principal principal) {
+        return purchaseService.buy(username(principal))
                 .map(result -> {
                     if (result.success()) {
                         return "redirect:/orders/" + result.orderId() + "?newOrder=true";
@@ -112,6 +123,19 @@ public class OrderController {
                     return "redirect:/cart/items?paymentError=true";
                 })
                 .defaultIfEmpty("redirect:/cart/items");
+    }
+
+    /**
+     * <summary>
+     * Извлекает имя пользователя из объекта аутентификации Principal.
+     * </summary>
+     * @param principal Объект текущего аутентифицированного пользователя.
+     * <return>
+     * @return Имя пользователя или null, если объект Principal отсутствует.
+     * </return>
+     **/
+    private String username(Principal principal) {
+        return principal == null ? null : principal.getName();
     }
 
     // endregion

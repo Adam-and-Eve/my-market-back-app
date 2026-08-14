@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.client.ClientAuthorizationException;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
@@ -64,15 +65,37 @@ public class PaymentClientServiceImplTest {
 
         Mockito.when(paymentsApi.getBalance()).thenReturn(Mono.just(balanceResponse));
 
-        Mockito.when(paymentMapper.toAvailabilityViewModel(balanceResponse)).thenReturn(expectedViewModel);
-
         StepVerifier.create(paymentClientService.getBalance())
                 .expectNext(expectedViewModel)
                 .verifyComplete();
 
         Mockito.verify(paymentsApi, Mockito.times(1)).getBalance();
 
-        Mockito.verify(paymentMapper, Mockito.times(1)).toAvailabilityViewModel(balanceResponse);
+        Mockito.verifyNoInteractions(paymentMapper);
+    }
+
+    /**
+     * <summary>
+     * Проверяет обработку ошибки авторизации (OAuth2) при запросе баланса.
+     * </summary>
+     **/
+    @Test
+    void getBalanceShouldReturnUnavailableOnClientAuthorizationException() {
+        var authException = Mockito.mock(ClientAuthorizationException.class);
+
+        var unavailableMessage = "Ошибка авторизации платежного сервиса";
+
+        var expectedViewModel = PaymentAvailabilityViewModel.unavailable(unavailableMessage);
+
+        Mockito.when(paymentsApi.getBalance()).thenReturn(Mono.error(authException));
+
+        Mockito.when(paymentHelper.resolveServiceUnavailableMessage()).thenReturn(unavailableMessage);
+
+        StepVerifier.create(paymentClientService.getBalance())
+                .expectNext(expectedViewModel)
+                .verifyComplete();
+
+        Mockito.verify(paymentHelper, Mockito.times(1)).resolveServiceUnavailableMessage();
     }
 
     /**
@@ -225,7 +248,9 @@ public class PaymentClientServiceImplTest {
 
         var invalidBytes = "invalid json".getBytes();
 
-        var expectedResult = OrderPaymentResultViewModel.rejected(0L, "Сбой обработки");
+        var defaultRejectedMessage = "Ошибка обработки платежа";
+
+        var expectedResult = OrderPaymentResultViewModel.rejected(0L, defaultRejectedMessage);
 
         Mockito.when(paymentsApi.pay(Mockito.any(PaymentRequest.class))).thenReturn(Mono.error(responseException));
 
@@ -235,13 +260,41 @@ public class PaymentClientServiceImplTest {
 
         Mockito.when(objectMapper.readValue(invalidBytes, PaymentResponse.class)).thenThrow(new RuntimeException("JSON error"));
 
+        Mockito.when(paymentHelper.resolveDefaultRejectedMessage()).thenReturn(defaultRejectedMessage);
+
         Mockito.when(paymentMapper.toOrderPaymentResultViewModel(Mockito.argThat(res ->
-                !res.getSuccess() && res.getBalance() == 0L && res.getMessage() == null
+                !res.getSuccess() && res.getBalance() == 0L && defaultRejectedMessage.equals(res.getMessage())
         ))).thenReturn(expectedResult);
 
         StepVerifier.create(paymentClientService.pay(amount))
                 .expectNext(expectedResult)
                 .verifyComplete();
+
+        Mockito.verify(paymentHelper, Mockito.times(1)).resolveDefaultRejectedMessage();
+    }
+
+    /**
+     * <summary>
+     * Проверяет обработку ошибки авторизации (OAuth2) в процессе проведение платежа.
+     * </summary>
+     **/
+    @Test
+    void payShouldReturnUnavailableOnClientAuthorizationException() {
+        var authException = Mockito.mock(ClientAuthorizationException.class);
+
+        var unavailableMessage = "Ошибка авторизации сервиса оплаты";
+
+        var expectedResult = OrderPaymentResultViewModel.unavailable(unavailableMessage);
+
+        Mockito.when(paymentsApi.pay(Mockito.any(PaymentRequest.class))).thenReturn(Mono.error(authException));
+
+        Mockito.when(paymentHelper.resolveServiceUnavailableMessage()).thenReturn(unavailableMessage);
+
+        StepVerifier.create(paymentClientService.pay(1000L))
+                .expectNext(expectedResult)
+                .verifyComplete();
+
+        Mockito.verify(paymentHelper, Mockito.times(1)).resolveServiceUnavailableMessage();
     }
 
     /**

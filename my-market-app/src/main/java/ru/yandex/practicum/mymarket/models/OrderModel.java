@@ -38,6 +38,12 @@ public class OrderModel {
     private Long id;
 
     /**
+     * Уникальный идентификатор покупателя в базе данных.
+     **/
+    @Column("user_id")
+    private Long userId;
+
+    /**
      * Дата и время создания заказа.
      **/
     @Column("created_at")
@@ -65,9 +71,15 @@ public class OrderModel {
     }
 
     private OrderModel(
+            final Long userId,
             final LocalDateTime createdAt,
             final String status) {
 
+        if (userId == null) {
+            throw new IllegalArgumentException("Идентификатор покупателя не может быть null");
+        }
+
+        this.userId = userId;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
         this.status = status != null ? status : STATUS_PENDING;
     }
@@ -75,6 +87,7 @@ public class OrderModel {
     @PersistenceCreator
     public OrderModel(
             final Long id,
+            final Long userId,
             final String status,
             final LocalDateTime createdAt
     ){
@@ -82,7 +95,12 @@ public class OrderModel {
             throw new IllegalArgumentException("Идентификатор заказа не может быть null");
         }
 
+        if (userId == null) {
+            throw new IllegalArgumentException("Идентификатор покупателя не может быть null");
+        }
+
         this.id = id;
+        this.userId = userId;
         this.status = status != null ? status : STATUS_PENDING;
         this.createdAt = createdAt != null ? createdAt : LocalDateTime.now();
     }
@@ -101,6 +119,18 @@ public class OrderModel {
      **/
     public Long getId(){
         return id;
+    }
+
+    /**
+     * <summary>
+     * Возвращает уникальный идентификатор покупателя.
+     * </summary>
+     * <return>
+     * @return Идентификатор покупателя.
+     * </return>
+     **/
+    public Long getUserId(){
+        return userId;
     }
 
     /**
@@ -189,8 +219,11 @@ public class OrderModel {
      * @return Новый пустой объект OrderModel.
      * </return>
      **/
-    public static OrderModel create() {
-        return new OrderModel(LocalDateTime.now(), STATUS_PENDING);
+    public static OrderModel create(final Long userId) {
+        return new OrderModel(
+                userId,
+                LocalDateTime.now(),
+                STATUS_PENDING);
     }
 
     // endregion

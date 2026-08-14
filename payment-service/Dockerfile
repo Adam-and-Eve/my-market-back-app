@@ -9,11 +9,11 @@ COPY payment-service/pom.xml ./payment-service/
 
 COPY api/ ./api/
 
-RUN mvn compile -DskipTests -B -ntp
+RUN mvn compile -Dmaven.test.skip=true -B -ntp
 
 COPY payment-service/src ./payment-service/src/
 
-RUN mvn -pl payment-service clean package -DskipTests -B -ntp
+RUN mvn -pl payment-service clean package -Dmaven.test.skip=true -B -ntp
 
 FROM eclipse-temurin:21-jre-noble
 WORKDIR /app

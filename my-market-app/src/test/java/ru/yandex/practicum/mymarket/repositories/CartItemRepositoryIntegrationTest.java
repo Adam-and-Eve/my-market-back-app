@@ -7,8 +7,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import ru.yandex.practicum.mymarket.MyMarketAppApplicationTests;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.ItemModel;
+import ru.yandex.practicum.mymarket.models.UserModel;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * <summary>
@@ -25,64 +27,48 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
     @Autowired
     private ItemRepository itemRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     // endregion
 
+    // region Setup
+
+    @BeforeEach
+    void clear() {
+        cartItemRepository.deleteAll().block();
+
+        itemRepository.deleteAll().block();
+
+        var systemIds = List.of(1L, 2L);
+
+        userRepository.findAll()
+                .filter(u -> !systemIds.contains(u.getId()))
+                .flatMap(u -> userRepository.delete(u))
+                .blockLast();
+    }
+
+    // endregion
 
     // region Tests
 
     /**
      * <summary>
-     * Проверяет успешный поиск элемента корзины по идентификатору существующего товара.
+     * Проверяет пакетную реактивную выборку элементов корзины пользователя по списку идентификаторов товаров с учетом изоляции пользователей.
      * </summary>
      **/
     @Test
-    void findByItemIdShouldReturnCartItemWhenItemExistsInCart()
-    {
-        var item = new ItemModel("Novation Launchkey 88", "MIDI-контроллер", "/novation.png", 45000L);
+    void findAllByUserIdAndItemIdInShouldReturnOnlyMatchingCartItemsForSpecificUser() {
+        var uniqueSuffix = UUID.randomUUID().toString();
 
-        var savedItem = itemRepository.save(item).block();
-        Assertions.assertNotNull(savedItem);
+        var user1 = userRepository.save(new UserModel("user1_" + uniqueSuffix, true)).block();
 
-        var cartItem = new CartItemModel(savedItem, 1);
+        var user2 = userRepository.save(new UserModel("user2_" + uniqueSuffix, true)).block();
 
-        cartItemRepository.save(cartItem).block();
+        Assertions.assertNotNull(user1);
 
-        var result = cartItemRepository.findByItemId(savedItem.getId()).blockOptional();
+        Assertions.assertNotNull(user2);
 
-        Assertions.assertTrue(result.isPresent());
-
-        Assertions.assertEquals(savedItem.getId(), result.get().getItemId());
-
-        Assertions.assertEquals(1, result.get().getQuantity());
-    }
-
-    /**
-     * <summary>
-     * Проверяет, что поиск по идентификатору товара возвращает пустой контейнер Mono, если такого товара нет в корзине.
-     * </summary>
-     **/
-    @Test
-    void findByItemIdShouldReturnEmptyOptionalWhenItemIsNotInCart()
-    {
-        var item = new ItemModel(" Xiaomi Mi Mix 4", "Смартфон", "/xiaomi.png", 60000L);
-
-        var savedItem = itemRepository.save(item).block();
-
-        Assertions.assertNotNull(savedItem);
-
-        var result = cartItemRepository.findByItemId(savedItem.getId()).blockOptional();
-
-        Assertions.assertTrue(result.isEmpty());
-    }
-
-    /**
-     * <summary>
-     * Проверяет пакетную реактивную выборку элементов корзины по списку идентификаторов товаров (In-запрос).
-     * </summary>
-     **/
-    @Test
-    void findAllByItemIdInShouldReturnOnlyMatchingCartItems()
-    {
         var item1 = new ItemModel("Товар 1", "Описание 1", "/img1.png", 1000L);
 
         var item2 = new ItemModel("Товар 2", "Описание 2", "/img2.png", 2000L);
@@ -99,19 +85,25 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
 
         var s3 = savedItems.get(2);
 
-        var cartItem1 = new CartItemModel(s1, 5);
+        var cartItem1User1 = new CartItemModel(user1.getId(), s1.getId(), 5);
 
-        var cartItem2 = new CartItemModel(s2, 2);
+        var cartItem2User1 = new CartItemModel(user1.getId(), s2.getId(), 2);
 
-        cartItemRepository.saveAll(List.of(cartItem1, cartItem2)).collectList().block();
+        var cartItem1User2 = new CartItemModel(user2.getId(), s1.getId(), 10);
+
+        cartItemRepository.saveAll(List.of(cartItem1User1, cartItem2User1, cartItem1User2)).collectList().block();
 
         var targetIds = List.of(s1.getId(), s2.getId(), s3.getId());
 
-        var result = cartItemRepository.findAllByItemIdIn(targetIds).collectList().block();
+        var result = cartItemRepository.findAllByUserIdAndItemIdIn(user1.getId(), targetIds).collectList().block();
 
         Assertions.assertNotNull(result);
 
         Assertions.assertEquals(2, result.size());
+
+        var allBelongToUser1 = result.stream().allMatch(ci -> ci.getUserId().equals(user1.getId()));
+
+        Assertions.assertTrue(allBelongToUser1);
 
         var containsItem1 = result.stream().anyMatch(ci -> ci.getItemId().equals(s1.getId()));
 
@@ -124,12 +116,21 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
 
     /**
      * <summary>
-     * Проверяет, что выборка всех элементов корзины строго отсортирована по возрастанию ID товара.
+     * Проверяет, что выборка всех элементов корзины конкретного пользователя строго отсортирована по возрастанию ID товара и не содержит позиций других пользователей.
      * </summary>
      **/
     @Test
-    void findAllByOrderByItemIdAscShouldReturnCartItemsSortedCorrectly()
-    {
+    void findAllByUserIdOrderByItemIdAscShouldReturnCartItemsSortedCorrectlyForSpecificUser() {
+        var uniqueSuffix = UUID.randomUUID().toString();
+
+        var user1 = userRepository.save(new UserModel("user1_" + uniqueSuffix, true)).block();
+
+        var user2 = userRepository.save(new UserModel("user2_" + uniqueSuffix, true)).block();
+
+        Assertions.assertNotNull(user1);
+
+        Assertions.assertNotNull(user2);
+
         var itemA = new ItemModel("Клавиатура A", "Описание A", "/imgA.png", 1000L);
 
         var itemB = new ItemModel("Клавиатура B", "Описание B", "/imgB.png", 2000L);
@@ -148,19 +149,25 @@ public class CartItemRepositoryIntegrationTest extends MyMarketAppApplicationTes
 
         Assertions.assertNotNull(sC);
 
-        var cartItemC = new CartItemModel(sC, 1);
+        var cartItemCUser1 = new CartItemModel(user1.getId(), sC.getId(), 1);
 
-        var cartItemA = new CartItemModel(sA, 3);
+        var cartItemAUser1 = new CartItemModel(user1.getId(), sA.getId(), 3);
 
-        var cartItemB = new CartItemModel(sB, 2);
+        var cartItemBUser1 = new CartItemModel(user1.getId(), sB.getId(), 2);
 
-        cartItemRepository.saveAll(List.of(cartItemC, cartItemA, cartItemB)).collectList().block();
+        var cartItemBUser2 = new CartItemModel(user2.getId(), sB.getId(), 99);
 
-        var sortedCartItems = cartItemRepository.findAllByOrderByItemIdAsc().collectList().block();
+        cartItemRepository.saveAll(List.of(cartItemCUser1, cartItemAUser1, cartItemBUser1, cartItemBUser2)).collectList().block();
+
+        var sortedCartItems = cartItemRepository.findAllByUserIdOrderByItemIdAsc(user1.getId()).collectList().block();
 
         Assertions.assertNotNull(sortedCartItems);
 
         Assertions.assertEquals(3, sortedCartItems.size());
+
+        var allBelongToUser1 = sortedCartItems.stream().allMatch(ci -> ci.getUserId().equals(user1.getId()));
+
+        Assertions.assertTrue(allBelongToUser1);
 
         Assertions.assertEquals(sA.getId(), sortedCartItems.get(0).getItemId());
 

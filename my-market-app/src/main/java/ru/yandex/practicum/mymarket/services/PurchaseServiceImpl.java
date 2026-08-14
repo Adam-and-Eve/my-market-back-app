@@ -12,10 +12,7 @@ import ru.yandex.practicum.mymarket.interfaces.PurchaseService;
 import ru.yandex.practicum.mymarket.models.CartItemModel;
 import ru.yandex.practicum.mymarket.models.OrderItemModel;
 import ru.yandex.practicum.mymarket.models.OrderModel;
-import ru.yandex.practicum.mymarket.repositories.CartItemRepository;
-import ru.yandex.practicum.mymarket.repositories.ItemRepository;
-import ru.yandex.practicum.mymarket.repositories.OrderItemRepository;
-import ru.yandex.practicum.mymarket.repositories.OrderRepository;
+import ru.yandex.practicum.mymarket.repositories.*;
 import ru.yandex.practicum.mymarket.viewmodels.CheckoutResultViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.OrderPaymentResultViewModel;
 import ru.yandex.practicum.mymarket.viewmodels.PendingOrderDetailsViewModel;
@@ -38,6 +35,7 @@ public class PurchaseServiceImpl implements PurchaseService {
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final UserRepository userRepository;
     private final PaymentClientService paymentClientService;
     private final TransactionalOperator transactionalOperator;
 
@@ -50,6 +48,7 @@ public class PurchaseServiceImpl implements PurchaseService {
             final CartItemRepository cartItemRepository,
             final OrderRepository orderRepository,
             final OrderItemRepository orderItemRepository,
+            final UserRepository userRepository,
             final PaymentClientService paymentClientService,
             final TransactionalOperator transactionalOperator) {
 
@@ -57,6 +56,7 @@ public class PurchaseServiceImpl implements PurchaseService {
         this.cartItemRepository = cartItemRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.userRepository = userRepository;
         this.paymentClientService = paymentClientService;
         this.transactionalOperator = transactionalOperator;
     }
@@ -72,31 +72,37 @@ public class PurchaseServiceImpl implements PurchaseService {
      * 2. (Без транзакции) Проводит списание средств.
      * 3. (Транзакция) Обновляет статус до PAID/PAYMENT_FAILED и очищает корзину.
      * </summary>
+     * @param username Имя покупателя.
      * <return>
      * @return Модель представления с результатом оформления заказа.
      * </return>
      **/
-    public Mono<CheckoutResultViewModel> buy() {
-        return cartItemRepository.findAllByOrderByItemIdAsc()
-                .collectList()
-                .flatMap(cartItems -> {
-                    if (cartItems.isEmpty()) {
-                        return Mono.just(CheckoutResultViewModel.empty());
-                    }
+    @Override
+    public Mono<CheckoutResultViewModel> buy(final String username) {
+        return userRepository.findByUsername(username)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found")))
+                .flatMap(user -> cartItemRepository.findAllByUserIdOrderByItemIdAsc(user.getId())
+                        .collectList()
+                        .flatMap(cartItems -> {
+                            if (cartItems.isEmpty()) {
+                                return Mono.just(CheckoutResultViewModel.empty());
+                            }
 
-                    return prepareAndSavePendingOrder(cartItems)
-                            .flatMap(details -> paymentClientService.pay(details.totalAmount())
-                                    .flatMap(payment -> processPaymentResult(details.order(), cartItems, payment)));
-                });
+                            return prepareAndSavePendingOrder(user.getId(), cartItems)
+                                    .flatMap(details -> paymentClientService.pay(details.totalAmount())
+                                            .flatMap(payment -> processPaymentResult(details.order(), cartItems, payment)));
+                        }));
     }
 
     /**
      * <summary>
      * Валидирует товары, создает заказ в статусе PENDING, сохраняет его позиции.
-     * Выполняется в рамках независимой транзакции.
      * </summary>
      **/
-    private Mono<PendingOrderDetailsViewModel> prepareAndSavePendingOrder(final List<CartItemModel> cartItems) {
+    private Mono<PendingOrderDetailsViewModel> prepareAndSavePendingOrder(
+            final long userId,
+            final List<CartItemModel> cartItems) {
+
         return Flux.fromIterable(cartItems)
                 .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
                         .switchIfEmpty(Mono.error(
@@ -109,7 +115,7 @@ public class PurchaseServiceImpl implements PurchaseService {
                             .mapToLong(p -> p.item().getPrice() * p.quantity())
                             .sum();
 
-                    OrderModel pendingOrder = OrderModel.create();
+                    OrderModel pendingOrder = OrderModel.create(userId);
 
                     return orderRepository.save(pendingOrder)
                             .flatMap(savedOrder -> {
@@ -133,7 +139,6 @@ public class PurchaseServiceImpl implements PurchaseService {
     /**
      * <summary>
      * Обрабатывает результат проведения платежа и обновляет статус заказа.
-     * Выполняется в рамках независимой транзакции.
      * </summary>
      **/
     private Mono<CheckoutResultViewModel> processPaymentResult(

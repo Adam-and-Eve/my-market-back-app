@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
@@ -32,7 +33,9 @@ public class PaymentServiceApplicationTests {
 
     @BeforeEach
     void clearDatabase() {
-        this.webTestClient = WebTestClient.bindToApplicationContext(applicationContext).build();
+        this.webTestClient = WebTestClient.bindToApplicationContext(applicationContext)
+                .apply(SecurityMockServerConfigurers.springSecurity())
+                .build();
     }
 
     // endregion

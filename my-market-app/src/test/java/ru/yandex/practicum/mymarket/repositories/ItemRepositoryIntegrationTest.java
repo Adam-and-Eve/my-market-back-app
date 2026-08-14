@@ -26,6 +26,15 @@ public class ItemRepositoryIntegrationTest extends MyMarketAppApplicationTests {
 
     // endregion
 
+    // region Setup
+
+    @BeforeEach
+    void clear() {
+        itemRepository.deleteAll().block();
+    }
+
+    // endregion
+
     // region Tests
 
     /**
